@@ -4,7 +4,7 @@
 [![Hassfest](https://github.com/hallyaus/Green-Mountain-Grills/actions/workflows/validate.yml/badge.svg)](https://github.com/hallyaus/Green-Mountain-Grills/actions/workflows/validate.yml)
 [![Tests](https://github.com/hallyaus/Green-Mountain-Grills/actions/workflows/test.yml/badge.svg)](https://github.com/hallyaus/Green-Mountain-Grills/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![HA min version](https://img.shields.io/badge/Home%20Assistant-2026.6%2B-41BDF5.svg)](https://www.home-assistant.io/)
+[![HA min version](https://img.shields.io/badge/Home%20Assistant-2026.1%2B-41BDF5.svg)](https://www.home-assistant.io/)
 
 Control and monitor Green Mountain Grills WiFi-enabled pellet smokers
 directly from Home Assistant - locally, over your own LAN, with no cloud

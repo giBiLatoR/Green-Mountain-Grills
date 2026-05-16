@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Home Assistant Core **2026.6.0** or newer.
+- Home Assistant Core **2026.1.0** or newer.
 - HACS installed and operational.
 - A Green Mountain Grills smoker with a WiFi-capable controller (see
   [MODELS.md](MODELS.md)).
