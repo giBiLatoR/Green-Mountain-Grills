@@ -37,7 +37,7 @@ Validation run before a cook session starts: grill reachability, probe plugged i
 _Avoid_: Validation (too generic), safety check
 
 ### Cook Start Detection
-The moment cooking begins, detected by a rapid **drop** in probe temperature (> 15°F within 3 minutes) as the probe transitions from ambient chamber heat into cold meat.
+The moment cooking begins, detected by a rapid **drop** in probe temperature (> 30°F within 1 minute) as the probe transitions from ambient chamber heat into cold meat.
 _Avoid_: Meat insertion, cook begin — those are user actions we can't directly observe
 
 ### Pull Reached
@@ -105,7 +105,7 @@ IDLE → PLANNED → PREHEATING → WAITING_MEAT → COOKING ↔ IN_STALL → AP
 | IDLE → PLANNED | User presses START COOK + confirms pre-flight | Create SQLite session, calculate projection curve |
 | PLANNED → PREHEATING | Session created | Power on grill (if off), set pit setpoint to calculated target |
 | PREHEATING → WAITING_MEAT | Pit temp reaches setpoint ±10°F sustained 3 min | Notify: "Grill ready, insert probe into meat" |
-| WAITING_MEAT → COOKING | Probe drops >15°F in 3 minutes (cook start detection) | Record cook_start_time, begin projection curve comparison |
+| WAITING_MEAT → COOKING | Probe drops >30°F in 1 minute (cook start detection) | Record cook_start_time, begin projection curve comparison |
 | COOKING ↔ IN_STALL | Probe enters/exits 158°F–170°F with rate <2°F/30min for 60+ min | Adjust tolerance band; notify user stall status |
 | COOKING → APPROACHING | Probe within 10°F of pull temp | Stop pit adjustments, notify "approaching pull" |
 | APPROACHING → PULL_REACHED | Probe >= pull temp | Critical notification. No grill changes. |
@@ -120,7 +120,7 @@ IDLE → PLANNED → PREHEATING → WAITING_MEAT → COOKING ↔ IN_STALL → AP
 > **Domain expert:** "The **Pre-Flight Check** would have flagged it before starting — chicken max is 4h. If they overrode the warning, we keep monitoring. We don't enforce runtime limits because the meat might actually be fine."
 
 > **Dev:** "How do we know the cook started?"
-> **Domain expert:** "**Cook Start Detection** — the probe was sitting in hot ambient air during preheat (~250°F). When it drops into cold meat, temperature plunges >15°F in 3 minutes. That drop is our trigger."
+> **Domain expert:** "**Cook Start Detection** — the probe was sitting in hot ambient air during preheat (~250°F). When it drops into cold meat, temperature plunges >30°F in 1 minute. That drop is our trigger."
 
 ## Flagged ambiguities
 
