@@ -74,3 +74,4 @@ home-assistant_v2.db*
 secrets.yaml
 *.local.yaml
 .pi/
+HANDOFF.md
