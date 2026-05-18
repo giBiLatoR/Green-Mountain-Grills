@@ -25,7 +25,16 @@ from .api import (
     GMGTimeoutError,
 )
 from .api import GMGError
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, LOGGER
+from .const import (
+    CONF_AUTO_COOK_DEV_MODE,
+    CONF_AUTO_COOK_ENABLED,
+    CONF_AUTO_COOK_PUSH,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    LOGGER,
+)
+from .cook_manager import CookManager
 
 type GMGConfigEntry = ConfigEntry[GMGCoordinator]
 
@@ -56,6 +65,16 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
             ),
             always_update=False,
         )
+        self.cook_manager = CookManager(hass, self)
+        self._refresh_cook_options(entry)
+
+    def _refresh_cook_options(self, entry: GMGConfigEntry) -> None:
+        """Push current options-flow values into the cook manager."""
+        self.cook_manager.configure(
+            auto_cook=bool(entry.options.get(CONF_AUTO_COOK_ENABLED, False)),
+            dev_mode=bool(entry.options.get(CONF_AUTO_COOK_DEV_MODE, False)),
+            push=bool(entry.options.get(CONF_AUTO_COOK_PUSH, False)),
+        )
 
     async def _async_setup(self) -> None:
         """Probe the grill once before the first poll."""
@@ -78,6 +97,7 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
                 translation_domain=DOMAIN,
                 translation_key="protocol_error",
             ) from err
+        await self.cook_manager.async_init_db()
 
     async def _async_update_data(self) -> GMGSnapshot:
         """Fetch a snapshot from the grill."""
@@ -112,6 +132,13 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
             ) from err
 
         ir.async_delete_issue(self.hass, DOMAIN, _SERVER_MODE_ISSUE)
+        # Refresh options-flow values each poll cycle in case user toggled
+        # auto-cook live, then let the cook manager run its control loop.
+        self._refresh_cook_options(self.config_entry)
+        try:
+            await self.cook_manager.update(snapshot)
+        except Exception:  # noqa: BLE001 — never let cook errors break polling
+            LOGGER.exception("cook manager update raised")
         return snapshot
 
     async def async_set_grill_temp(self, f: int) -> None:

@@ -1,6 +1,7 @@
 """Sensor platform for the Green Mountain Grills integration."""
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -10,12 +11,14 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from .api import FireState, PowerState, WarnCode
+from .cook_manager import CookState
+from .cook_physics import CP_MEATS, expected_probe_at
 from .coordinator import GMGConfigEntry, GMGCoordinator
 from .entity import GMGBaseEntity
 
@@ -107,6 +110,103 @@ SENSORS: tuple[GMGSensorDescription, ...] = (
 )
 
 
+def _cook_elapsed_minutes(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    if s is None or s.cook_started_at is None:
+        return None
+    return round((time.time() - s.cook_started_at) / 60, 1)
+
+
+def _cook_remaining_minutes(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    if s is None or s.cook_started_at is None:
+        return None
+    total_min = s.projection.total_hours * 60
+    elapsed_min = (time.time() - s.cook_started_at) / 60
+    remaining = total_min - elapsed_min
+    return round(max(0.0, remaining), 1)
+
+
+def _cook_expected_probe(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    if s is None or s.cook_started_at is None:
+        return None
+    elapsed_h = (time.time() - s.cook_started_at) / 3600
+    return round(expected_probe_at(s.projection, elapsed_h), 1)
+
+
+def _cook_pit_target(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    return s.pit_target_f if s is not None else None
+
+
+def _cook_pull_temp(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    return CP_MEATS[s.meat_key].pull_f if s is not None else None
+
+
+def _cook_state(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    return s.state.value if s is not None else CookState.IDLE.value
+
+
+def _cook_meat_label(c: GMGCoordinator) -> StateType:
+    s = c.cook_manager.session
+    return CP_MEATS[s.meat_key].label if s is not None else None
+
+
+COOK_SENSORS: tuple[GMGSensorDescription, ...] = (
+    GMGSensorDescription(
+        key="cook_state",
+        translation_key="cook_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=[s.value for s in CookState],
+        value_fn=_cook_state,
+    ),
+    GMGSensorDescription(
+        key="cook_meat",
+        translation_key="cook_meat",
+        value_fn=_cook_meat_label,
+    ),
+    GMGSensorDescription(
+        key="cook_elapsed_minutes",
+        translation_key="cook_elapsed_minutes",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_cook_elapsed_minutes,
+    ),
+    GMGSensorDescription(
+        key="cook_remaining_minutes",
+        translation_key="cook_remaining_minutes",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_cook_remaining_minutes,
+    ),
+    GMGSensorDescription(
+        key="cook_expected_probe_temp",
+        translation_key="cook_expected_probe_temp",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        value_fn=_cook_expected_probe,
+    ),
+    GMGSensorDescription(
+        key="cook_pit_target",
+        translation_key="cook_pit_target",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        value_fn=_cook_pit_target,
+    ),
+    GMGSensorDescription(
+        key="cook_pull_temp",
+        translation_key="cook_pull_temp",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        value_fn=_cook_pull_temp,
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: GMGConfigEntry,
@@ -115,7 +215,8 @@ async def async_setup_entry(
     """Set up GMG sensors from a config entry."""
     coordinator = entry.runtime_data
     async_add_entities(
-        GMGSensor(coordinator, description) for description in SENSORS
+        GMGSensor(coordinator, description)
+        for description in (*SENSORS, *COOK_SENSORS)
     )
 
 

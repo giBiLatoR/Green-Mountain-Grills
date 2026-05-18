@@ -1,6 +1,7 @@
 """Binary sensor platform for the Green Mountain Grills integration."""
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -14,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import GMGSnapshot, PowerState
+from .cook_physics import expected_probe_at
 from .coordinator import GMGConfigEntry, GMGCoordinator
 from .entity import GMGBaseEntity
 
@@ -108,10 +110,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up GMG binary sensors from a config entry."""
     coordinator = entry.runtime_data
-    async_add_entities(
-        GMGBinarySensor(coordinator, description)
-        for description in BINARY_SENSORS
-    )
+    entities: list[BinarySensorEntity] = [
+        GMGBinarySensor(coordinator, d) for d in BINARY_SENSORS
+    ]
+    entities.append(GMGCookOnScheduleSensor(coordinator))
+    async_add_entities(entities)
 
 
 class GMGBinarySensor(GMGBaseEntity, BinarySensorEntity):
@@ -133,3 +136,29 @@ class GMGBinarySensor(GMGBaseEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         """Return whether the underlying snapshot flag is set."""
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+class GMGCookOnScheduleSensor(GMGBaseEntity, BinarySensorEntity):
+    """True when active cook probe is within tolerance of projected curve."""
+
+    _attr_translation_key = "cook_on_schedule"
+
+    def __init__(self, coordinator: GMGCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.info.serial}_cook_on_schedule"
+
+    @property
+    def is_on(self) -> bool | None:
+        session = self.coordinator.cook_manager.session
+        if session is None or session.cook_started_at is None:
+            return None
+        probe_f = (
+            self.coordinator.data.probe_1_temp
+            if session.probe_index == 1
+            else self.coordinator.data.probe_2_temp
+        )
+        if probe_f is None:
+            return None
+        elapsed_h = (time.time() - session.cook_started_at) / 3600
+        expected = expected_probe_at(session.projection, elapsed_h)
+        return abs(expected - probe_f) <= 10.0
