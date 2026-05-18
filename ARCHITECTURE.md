@@ -160,7 +160,7 @@ Command bytes (`UR001!`, `UL!`, `UN!`, `UK001!`, etc.), port defaults, timeouts,
 #### `coordinator.py` — GMGCoordinator (DataUpdateCoordinator)
 
 - Extends HA's `DataUpdateCoordinator[GMGSnapshot]`.
-- **Polling Interval:** Configurable via options flow (default 30s, range 5-600s).
+- **Polling Interval:** Configurable via options flow (default 15s, range 5-600s).
 - **`_async_setup()`:** Probes the grill once; raises `ConfigEntryNotReady` if Server Mode detected.
 - **`_async_update_data()`:** Polls with 10-second timeout; creates repair issues for persistent Server Mode errors.
 - **Command Methods:** `async_set_grill_temp`, `async_set_probe_target`, `async_power_on/off`, `async_cold_smoke` — all go through `_call()` which maps API exceptions to HA exceptions and triggers a refresh after success.

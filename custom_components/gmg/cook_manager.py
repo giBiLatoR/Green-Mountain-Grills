@@ -41,8 +41,8 @@ if TYPE_CHECKING:
 # Guardrails (CONTEXT.md) ----------------------------------------------------
 PIT_CLAMP_MIN_F = 150
 PIT_CLAMP_MAX_F = 375
-COOK_START_DROP_F = 15           # Probe drop trigger for cook-start detection.
-COOK_START_WINDOW_S = 180        # Within 3 minutes.
+COOK_START_DROP_F = 30           # Probe drop trigger for cook-start detection.
+COOK_START_WINDOW_S = 60         # Within 1 minute.
 PREHEAT_BAND_F = 10              # Pit within ±10°F of setpoint.
 PREHEAT_HOLD_S = 180             # Sustained 3 min.
 APPROACHING_BAND_F = 10          # Within 10°F of pull.
@@ -446,7 +446,7 @@ class CookManager:
     # --- control helpers ----------------------------------------------------
 
     def _detect_cook_start(self, session: CookSession) -> bool:
-        """Probe DROP > 15°F within 3 min (CONTEXT.md)."""
+        """Probe DROP > 30°F within 1 min."""
         hist = session.probe_history
         if len(hist) < 2:
             return False

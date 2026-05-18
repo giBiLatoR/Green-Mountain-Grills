@@ -70,7 +70,7 @@ router.
 
 The integration exposes one option:
 
-- **Scan interval** (seconds, default `30`). The controller is bandwidth-
+- **Scan interval** (seconds, default `15`). The controller is bandwidth-
   constrained; values below `5` are not recommended and the UI will warn.
 
 ## Troubleshooting: "no devices found"
