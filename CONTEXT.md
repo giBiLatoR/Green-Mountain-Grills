@@ -58,7 +58,7 @@ _Avoid_: Debug mode, logging mode — dev mode implies intentional data collecti
 - A **Cook Session** produces zero or more **Rate-Limited Adjustments** during its COOKING state.
 - The **Projection Curve** is computed once at session creation from meat type + weight + calculated pit temp, then queried continuously during cooking.
 - A **Phase** transition is detected from probe temperature behavior (stall entry/exit), not from elapsed time.
-- The coordinator polls at the user-configured interval (default 30s) — this does NOT change during active cooks.
+- The coordinator polls at the user-configured interval (default 15s) — this does NOT change during active cooks.
 - One cook session per grill config entry at a time.
 
 ## Guardrails

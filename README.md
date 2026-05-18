@@ -97,7 +97,7 @@ UI.
   matching MAC prefix on the network.
 - **Manual entry** is available for routed networks where broadcast
   discovery is not viable.
-- **Options**: scan interval slider (default `30` seconds; UI warns below `5`), plus Auto Cook enable/disable and dev mode toggle.
+- **Options**: scan interval slider (default `15` seconds; UI warns below `5`), plus Auto Cook enable/disable and dev mode toggle.
 
 ## Entities
 
