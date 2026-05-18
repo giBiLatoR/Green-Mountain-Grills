@@ -4,6 +4,12 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![HA min version](https://img.shields.io/badge/Home%20Assistant-2026.1%2B-41BDF5.svg)](https://www.home-assistant.io/)
 
+> ## ⚠️ WARNING — EXPERIMENTAL
+>
+> **This fork is experimental and under active development.** The Auto Cook feature automatically controls your pellet grill's temperature based on sensor readings. While safety guardrails are in place (maximum pit temperature clamp, rate-limited adjustments), this software can make real-world changes to a device involving live fire and high heat.
+>
+> **Use at your own risk.** Always monitor your grill during use. Do not leave your home while an automated cook is running until you have thoroughly tested and verified the system in your environment. The authors accept no liability for property damage, injury, or food loss resulting from the use of this integration.
+
 > ## Fork Notice — Auto Cook Feature
 >
 > This is a **feature fork** of [hallyaus/Green-Mountain-Grills](https://github.com/hallyaus/Green-Mountain-Grills), the original upstream integration. All core grill control, monitoring, and protocol logic is credited to and maintained by **[hallyaus](https://github.com/hallyaus)**.
