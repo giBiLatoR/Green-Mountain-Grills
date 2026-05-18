@@ -23,6 +23,16 @@ class GMGButtonDescription(ButtonEntityDescription):
     press_fn: Callable[[GMGCoordinator], Awaitable[None]]
 
 
+async def _start_cook(coordinator: GMGCoordinator) -> None:
+    """Resolve helper-entity values and start a cook via the coordinator."""
+    from .services import async_start_cook_from_helpers  # local import to avoid cycle
+    await async_start_cook_from_helpers(coordinator.hass, coordinator)
+
+
+async def _abort_cook(coordinator: GMGCoordinator) -> None:
+    await coordinator.cook_manager.abort_cook()
+
+
 BUTTONS: tuple[GMGButtonDescription, ...] = (
     GMGButtonDescription(
         key="power_on",
@@ -38,6 +48,16 @@ BUTTONS: tuple[GMGButtonDescription, ...] = (
         key="cold_smoke",
         translation_key="cold_smoke",
         press_fn=lambda c: c.async_cold_smoke(),
+    ),
+    GMGButtonDescription(
+        key="start_cook",
+        translation_key="start_cook",
+        press_fn=_start_cook,
+    ),
+    GMGButtonDescription(
+        key="abort_cook",
+        translation_key="abort_cook",
+        press_fn=_abort_cook,
     ),
 )
 

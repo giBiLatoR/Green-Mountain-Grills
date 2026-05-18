@@ -10,16 +10,22 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfMass, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
+    COOK_WEIGHT_STEP_KG,
     GRILL_TEMP_STEP_F,
     LOGGER,
+    MAX_COOK_WEIGHT_KG,
+    MAX_FINISH_IN_HOURS,
     MAX_GRILL_TEMP_F,
     MAX_PROBE_TARGET_F,
+    MIN_COOK_WEIGHT_KG,
+    MIN_FINISH_IN_HOURS,
     MIN_GRILL_TEMP_F,
     MIN_PROBE_TARGET_F,
 )
@@ -85,7 +91,27 @@ async def async_setup_entry(
     """Set up GMG number entities from a config entry."""
     coordinator = entry.runtime_data
     async_add_entities(
-        GMGNumber(coordinator, description) for description in NUMBERS
+        [
+            *(GMGNumber(coordinator, d) for d in NUMBERS),
+            GMGCookInputNumber(
+                coordinator,
+                key="cook_weight_kg",
+                unit=UnitOfMass.KILOGRAMS,
+                min_v=MIN_COOK_WEIGHT_KG,
+                max_v=MAX_COOK_WEIGHT_KG,
+                step=COOK_WEIGHT_STEP_KG,
+                default=1.0,
+            ),
+            GMGCookInputNumber(
+                coordinator,
+                key="cook_finish_in_hours",
+                unit=UnitOfTime.HOURS,
+                min_v=MIN_FINISH_IN_HOURS,
+                max_v=MAX_FINISH_IN_HOURS,
+                step=0.25,
+                default=12.0,
+            ),
+        ]
     )
 
 
@@ -118,3 +144,47 @@ class GMGNumber(GMGBaseEntity, NumberEntity):
         except Exception as err:  # noqa: BLE001 - defensive boundary
             LOGGER.exception("Unexpected error setting %s", self.entity_description.key)
             raise HomeAssistantError(str(err)) from err
+
+
+class GMGCookInputNumber(GMGBaseEntity, NumberEntity, RestoreEntity):
+    """Local-only number used as a planning input for the auto-cook service."""
+
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: GMGCoordinator,
+        *,
+        key: str,
+        unit: str,
+        min_v: float,
+        max_v: float,
+        step: float,
+        default: float,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.info.serial}_{key}"
+        self._attr_translation_key = key
+        self._attr_native_unit_of_measurement = unit
+        self._attr_native_min_value = min_v
+        self._attr_native_max_value = max_v
+        self._attr_native_step = step
+        self._attr_native_value = default
+        self._key = key
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None:
+            try:
+                self._attr_native_value = float(last.state)
+            except (TypeError, ValueError):
+                pass
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._attr_native_value = value
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:  # always available — purely local
+        return True

@@ -18,16 +18,28 @@ from .api import GMGInvalidValueError
 from .const import (
     DOMAIN,
     LOGGER,
+    MAX_COOK_WEIGHT_KG,
+    MAX_FINISH_IN_HOURS,
     MAX_PROBE_TARGET_F,
+    MIN_COOK_WEIGHT_KG,
+    MIN_FINISH_IN_HOURS,
     MIN_PROBE_TARGET_F,
 )
+from .cook_manager import CookManagerError, CookMode
+from .cook_physics import CP_MEATS
 from .coordinator import GMGConfigEntry, GMGCoordinator
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_PROBE = "probe"
+ATTR_MEAT_KEY = "meat_key"
+ATTR_WEIGHT_KG = "weight_kg"
+ATTR_MODE = "mode"
+ATTR_FINISH_IN_HOURS = "finish_in_hours"
 
 SERVICE_SET_PROBE_TARGET = "set_probe_target"
 SERVICE_REFRESH = "refresh"
+SERVICE_START_COOK = "start_cook"
+SERVICE_ABORT_COOK = "abort_cook"
 
 _SET_PROBE_TARGET_SCHEMA = vol.Schema(
     {
@@ -44,6 +56,28 @@ _REFRESH_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
     }
+)
+
+_START_COOK_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
+        vol.Required(ATTR_MEAT_KEY): vol.In(list(CP_MEATS.keys())),
+        vol.Required(ATTR_WEIGHT_KG): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_COOK_WEIGHT_KG, max=MAX_COOK_WEIGHT_KG)
+        ),
+        vol.Required(ATTR_PROBE): vol.All(vol.Coerce(int), vol.Range(min=1, max=2)),
+        vol.Optional(ATTR_MODE, default=CookMode.AUTONOMOUS.value): vol.In(
+            [m.value for m in CookMode]
+        ),
+        vol.Required(ATTR_FINISH_IN_HOURS): vol.All(
+            vol.Coerce(float),
+            vol.Range(min=MIN_FINISH_IN_HOURS, max=MAX_FINISH_IN_HOURS),
+        ),
+    }
+)
+
+_ABORT_COOK_SCHEMA = vol.Schema(
+    {vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string}
 )
 
 
@@ -99,6 +133,26 @@ def async_setup_services(hass: HomeAssistant) -> None:
         coordinator = _resolve_coordinator(hass, call.data[ATTR_CONFIG_ENTRY_ID])
         await coordinator.async_request_refresh()
 
+    async def _async_start_cook(call: ServiceCall) -> None:
+        coordinator = _resolve_coordinator(hass, call.data[ATTR_CONFIG_ENTRY_ID])
+        if coordinator.data is None:
+            raise ServiceValidationError("no snapshot available yet")
+        try:
+            await coordinator.cook_manager.start_cook(
+                meat_key=call.data[ATTR_MEAT_KEY],
+                weight_kg=call.data[ATTR_WEIGHT_KG],
+                probe_index=call.data[ATTR_PROBE],
+                mode=CookMode(call.data[ATTR_MODE]),
+                finish_in_hours=call.data[ATTR_FINISH_IN_HOURS],
+                snapshot=coordinator.data,
+            )
+        except CookManagerError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def _async_abort_cook(call: ServiceCall) -> None:
+        coordinator = _resolve_coordinator(hass, call.data[ATTR_CONFIG_ENTRY_ID])
+        await coordinator.cook_manager.abort_cook()
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_PROBE_TARGET,
@@ -113,11 +167,71 @@ def async_setup_services(hass: HomeAssistant) -> None:
         schema=_REFRESH_SCHEMA,
         supports_response=SupportsResponse.NONE,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_COOK,
+        _async_start_cook,
+        schema=_START_COOK_SCHEMA,
+        supports_response=SupportsResponse.NONE,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ABORT_COOK,
+        _async_abort_cook,
+        schema=_ABORT_COOK_SCHEMA,
+        supports_response=SupportsResponse.NONE,
+    )
+
+
+async def async_start_cook_from_helpers(
+    hass: HomeAssistant, coordinator: GMGCoordinator
+) -> None:
+    """Resolve helper-entity values for this grill and start a cook.
+
+    Used by the button.start_cook entity. Pulls meat/mode/probe from the
+    select entities and weight/finish-in-hours from the number entities.
+    """
+    serial = coordinator.info.serial
+    states = hass.states
+    domain_to_entity_id = {
+        "cook_meat_type": f"select.gmg_{serial.lower()}_cook_meat_type",
+        "cook_mode": f"select.gmg_{serial.lower()}_cook_mode",
+        "cook_probe": f"select.gmg_{serial.lower()}_cook_probe",
+        "cook_weight_kg": f"number.gmg_{serial.lower()}_cook_weight_kg",
+        "cook_finish_in_hours": f"number.gmg_{serial.lower()}_cook_finish_in_hours",
+    }
+    values: dict[str, str | None] = {}
+    for slot, entity_id in domain_to_entity_id.items():
+        st = states.get(entity_id)
+        values[slot] = st.state if st is not None else None
+    missing = [k for k, v in values.items() if v in (None, "unknown", "unavailable")]
+    if missing:
+        raise ServiceValidationError(
+            f"missing auto-cook helper values: {', '.join(missing)}"
+        )
+    if coordinator.data is None:
+        raise ServiceValidationError("no snapshot available yet")
+    try:
+        await coordinator.cook_manager.start_cook(
+            meat_key=values["cook_meat_type"],
+            weight_kg=float(values["cook_weight_kg"]),
+            probe_index=int(values["cook_probe"]),
+            mode=CookMode(values["cook_mode"]),
+            finish_in_hours=float(values["cook_finish_in_hours"]),
+            snapshot=coordinator.data,
+        )
+    except CookManagerError as err:
+        raise ServiceValidationError(str(err)) from err
 
 
 @callback
 def async_unload_services(hass: HomeAssistant) -> None:
     """Remove the GMG domain services."""
-    for service in (SERVICE_SET_PROBE_TARGET, SERVICE_REFRESH):
+    for service in (
+        SERVICE_SET_PROBE_TARGET,
+        SERVICE_REFRESH,
+        SERVICE_START_COOK,
+        SERVICE_ABORT_COOK,
+    ):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)

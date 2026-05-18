@@ -30,3 +30,79 @@ refresh:
       selector:
         config_entry:
           integration: gmg
+
+start_cook:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmg
+    meat_key:
+      required: true
+      selector:
+        select:
+          options:
+            - beef_brisket_packer
+            - beef_brisket_flat
+            - pork_butt_pulled
+            - pork_butt_sliced
+            - beef_chuck_roast
+            - lamb_shoulder
+            - beef_ribs_dino
+            - whole_turkey
+            - turkey_breast
+            - whole_chicken
+            - chicken_thighs_legs
+            - chicken_breast
+            - pork_loin
+            - lamb_leg
+            - beef_tri_tip
+            - beef_prime_rib
+            - baby_back_ribs
+            - spare_ribs_stlouis
+            - pork_chops
+            - salmon_fillet
+            - sausage_brats
+    weight_kg:
+      required: true
+      selector:
+        number:
+          min: 0.2
+          max: 12.0
+          step: 0.1
+          unit_of_measurement: "kg"
+          mode: box
+    probe:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 2
+          step: 1
+          mode: box
+    mode:
+      default: autonomous
+      selector:
+        select:
+          options:
+            - set_and_forget
+            - autonomous
+            - coach
+    finish_in_hours:
+      required: true
+      selector:
+        number:
+          min: 1.0
+          max: 30.0
+          step: 0.25
+          unit_of_measurement: "h"
+          mode: box
+
+abort_cook:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmg

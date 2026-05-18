@@ -33,6 +33,9 @@ from .api import (
     async_discover,
 )
 from .const import (
+    CONF_AUTO_COOK_DEV_MODE,
+    CONF_AUTO_COOK_ENABLED,
+    CONF_AUTO_COOK_PUSH,
     CONF_SCAN_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
@@ -318,6 +321,9 @@ class GMGOptionsFlow(OptionsFlowWithReload):
                         mode="box",
                     )
                 ),
+                vol.Optional(CONF_AUTO_COOK_ENABLED, default=False): bool,
+                vol.Optional(CONF_AUTO_COOK_DEV_MODE, default=False): bool,
+                vol.Optional(CONF_AUTO_COOK_PUSH, default=False): bool,
             }
         )
 
