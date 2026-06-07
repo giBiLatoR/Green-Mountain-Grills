@@ -12,7 +12,10 @@ Hard rules (never violated here):
 from __future__ import annotations
 
 import json
-import sqlite3
+try:
+    import sqlite3
+except ModuleNotFoundError:  # Python build without the sqlite3 C extension
+    sqlite3 = None  # type: ignore[assignment]
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -145,6 +148,12 @@ class CookManager:
 
     async def async_init_db(self) -> None:
         """Create schema and import meat reference data if missing."""
+        if sqlite3 is None:
+            LOGGER.warning(
+                "sqlite3 is unavailable on this Python build; "
+                "Auto Cook history and sessions are disabled"
+            )
+            return
         await self.hass.async_add_executor_job(self._init_db_sync)
 
     def _init_db_sync(self) -> None:
@@ -276,6 +285,11 @@ class CookManager:
         snapshot: GMGSnapshot,
     ) -> CookSession:
         """Create a session and transition PLANNED → PREHEATING."""
+        if sqlite3 is None:
+            raise CookManagerError(
+                "Auto Cook requires the sqlite3 module, "
+                "which is unavailable on this Python build"
+            )
         if self.session is not None and self.session.state not in (
             CookState.COMPLETE,
             CookState.ABORTED,
