@@ -1,7 +1,7 @@
 """Config flow for the Green Mountain Grills integration."""
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 
@@ -44,7 +44,8 @@ from .const import (
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
-from .coordinator import GMGConfigEntry
+if TYPE_CHECKING:
+    from .coordinator import GMGConfigEntry
 
 
 class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
