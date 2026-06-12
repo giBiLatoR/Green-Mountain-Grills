@@ -44,6 +44,44 @@ dependency.
 
 **Fork maintained by [giBiLatoR](https://github.com/giBiLatoR). Original integration by [hallyaus](https://github.com/hallyaus).**
 
+## How it works (the simple version)
+
+Think of your pellet grill as an oven that burns little wood pellets to make heat and smoke. This add-on talks to the grill over your home WiFi (no internet or cloud needed) and does two jobs:
+
+1. **Watch.** Every few seconds it asks the grill how things are going: how hot the fire box is, how hot the meat is (that's the *probe* — a thermometer you stick in the food), how many pellets are left, and whether anything is wrong. Those readings become the tiles and the glowing smoker picture you see on your dashboard.
+
+2. **Drive — "Auto Cook" (a.k.a. Cruise Control).** You tell it three things: *what* meat, *how heavy*, and *what time you want to eat*. A physics model — the same kind of maths that describes how heat slowly soaks into food — figures out how hot to run the grill and when dinner will actually be ready. While it cooks, it keeps checking the meat's real temperature against where it *should* be by now, and nudges the grill a little hotter or cooler to stay on schedule. It does this gently, and it will **never shut the fire off by itself**.
+
+### Cook modes (what they're *meant* to do)
+
+| Mode | Idea |
+|------|------|
+| **Set & Forget** | Just watch and tell you what's happening — send notifications at each stage, but let *you* turn the dials. |
+| **Autonomous** | Drive the grill itself — make small, rate-limited setpoint nudges to keep the food on its schedule. |
+| **Coach** | Meet in the middle — pause at the big moments (preheat done, stall, almost-there) and suggest what to do, you decide. |
+
+> **Heads-up (current code):** the mode you pick is saved with the cook, but the
+> control loop doesn't branch on it yet — right now every mode runs the same
+> active-adjustment + notify logic. Wiring the three behaviours apart is a
+> planned change; until then, treat the selector as a label.
+
+### Reading the cook on your dashboard
+
+- **Auto Start Temp** — the grill temperature the physics model chose for this
+  cook (`cook_pit_target`). This is the "estimated start temperature."
+- **Pace** — are we ahead or behind? It compares the food's real temperature to
+  where the projection says it *should* be: 🟢 on track, 🔵 ahead, 🔴 behind,
+  with the gap in °F.
+- **Cook Progress vs Plan** — an [apexcharts](https://github.com/RomRider/apexcharts-card)
+  graph of **Food Actual vs Food Expected** (plus grill and pit setpoint), so
+  you can see the real curve tracking the planned curve in real time.
+
+The cook moves through stages, like steps in a recipe:
+
+**Preheat** (get hot) → **Waiting for meat** (it notices the temperature dip when you put cold food on) → **Cooking** → **Approaching** (almost done) → **Pull!** (it tells you to take the meat off).
+
+The stage it's on right now is the **"phase"** shown on your dashboard. If the phase says *idle*, no auto-cook is running yet — you start one with the **Start Auto-Cook** button after turning Cruise Control on.
+
 ## Features
 
 ### Core Integration (upstream)
@@ -233,6 +271,59 @@ automation:
         data:
           temperature: 225
 ```
+
+## Dashboard & phone popup
+
+The companion dashboards drive everything from a single **`#smoker` popup**
+(a [bubble-card](https://github.com/Clooos/Bubble-Card) pop-up) that appears on
+both the **PHONES** and **Primary** dashboards. Inside the popup:
+
+- **Smoker picture** — a `picture-elements` card overlaid on a photo of the
+  grill. It shows the **phase**, live **grill** and **probe** temperatures (in
+  °F), a power button, a spinning fan when it's running, and warning/low-pellet
+  badges. The whole card glows red while heating.
+- **Smoker Controls** — one `entities` card that changes with context:
+  - **Cruise Control off** → manual targets (grill setpoint, probe targets).
+  - **Cruise Control on + idle** → the Auto Cook setup (meat, mode, primary
+    probe, weight, finish-in-hours) and a **▶ Start Auto-Cook** button.
+  - **Cruise Control on + cooking** → a live read-out (phase, meat, on-schedule,
+    elapsed, time remaining, estimated ready-at clock, pit target, probe
+    now/expected, pull target) and a **■ Abort Cook** button.
+
+Temperatures from the integration are reported in your Home Assistant unit
+system (°C here in metric land), so the dashboards convert to °F with
+`× 1.8 + 32`. Two template helpers, `sensor.gmg_grill_temp_f` and
+`sensor.gmg_probe_1_temp_f`, do this for the picture overlay.
+
+> **Tip — "Est. Ready At" should be a clock, not a countdown that creeps.**
+> Build it from the integration's `cook_remaining_minutes` sensor
+> (`now() + remaining`), **not** from the finish-in-hours *input*. The input is
+> a fixed number, so `now() + finish_in_hours` slides forward by a minute every
+> minute. Using the remaining-minutes sensor keeps the clock steady.
+
+### Auto Cook checklist (so the phase isn't stuck on *idle*)
+
+1. **Enable Auto Cook** in the integration options (it's off by default). The
+   per-poll control loop does nothing while it's disabled, so the phase never
+   leaves *idle*.
+2. Turn **Cruise Control** on, pick meat/weight/finish time, press
+   **Start Auto-Cook**.
+3. Put the meat on *after* the grill is hot — the cook-start detector looks for
+   a sharp probe-temperature **drop** (cold meat going on). A probe already
+   buried in warm meat won't trigger it.
+
+### Recent fixes (2026-06)
+
+- Synced `translations/en.json` with `strings.json`. The stale copy left the
+  Auto Cook entities unnamed, so Home Assistant fell back to collision IDs like
+  `select.gmg_gmg12137138_2`. Entities now get their proper IDs
+  (`select.gmg_gmg12137138_cook_meat_type`, `button.gmg_gmg12137138_start_cook`,
+  `sensor.gmg_gmg12137138_cook_state`, …).
+- Hardened `async_start_cook_from_helpers` to resolve helper entities by
+  registry **unique_id** instead of hard-coded entity IDs, so a future rename
+  can't break the Start Cook button.
+- Fixed the dashboard "Est. Finish Time" so it no longer creeps forward (now
+  uses `cook_remaining_minutes`).
 
 ## Troubleshooting
 
