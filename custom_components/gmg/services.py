@@ -13,6 +13,7 @@ from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 
 from .api import GMGInvalidValueError
 from .const import (
@@ -192,17 +193,20 @@ async def async_start_cook_from_helpers(
     select entities and weight/finish-in-hours from the number entities.
     """
     serial = coordinator.info.serial
-    states = hass.states
-    domain_to_entity_id = {
-        "cook_meat_type": f"select.gmg_{serial.lower()}_cook_meat_type",
-        "cook_mode": f"select.gmg_{serial.lower()}_cook_mode",
-        "cook_probe": f"select.gmg_{serial.lower()}_cook_probe",
-        "cook_weight_kg": f"number.gmg_{serial.lower()}_cook_weight_kg",
-        "cook_finish_in_hours": f"number.gmg_{serial.lower()}_cook_finish_in_hours",
+    registry = er.async_get(hass)
+    # Resolve by registry unique_id ({serial}_{key}) so renamed or
+    # collision-suffixed entity_ids still resolve correctly.
+    slot_to_domain = {
+        "cook_meat_type": "select",
+        "cook_mode": "select",
+        "cook_probe": "select",
+        "cook_weight_kg": "number",
+        "cook_finish_in_hours": "number",
     }
     values: dict[str, str | None] = {}
-    for slot, entity_id in domain_to_entity_id.items():
-        st = states.get(entity_id)
+    for slot, domain in slot_to_domain.items():
+        entity_id = registry.async_get_entity_id(domain, DOMAIN, f"{serial}_{slot}")
+        st = hass.states.get(entity_id) if entity_id is not None else None
         values[slot] = st.state if st is not None else None
     missing = [k for k, v in values.items() if v in (None, "unknown", "unavailable")]
     if missing:

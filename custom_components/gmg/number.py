@@ -135,6 +135,13 @@ class GMGNumber(GMGBaseEntity, NumberEntity):
         """Return the current value from the description."""
         return self.entity_description.value_fn(self.coordinator)
 
+    @property
+    def native_max_value(self) -> float:
+        """Grill setpoint honors the user-configurable ceiling; others fixed."""
+        if self.entity_description.key == "grill_setpoint":
+            return self.coordinator.max_grill_temp_f
+        return self.entity_description.native_max_value
+
     async def async_set_native_value(self, value: float) -> None:
         """Push a new value to the grill via the description's set function."""
         try:

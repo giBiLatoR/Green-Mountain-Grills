@@ -18,7 +18,6 @@ from .api import FireState, PowerState
 from .const import (
     GRILL_TEMP_STEP_F,
     LOGGER,
-    MAX_GRILL_TEMP_F,
     MIN_GRILL_TEMP_F,
 )
 from .coordinator import GMGConfigEntry, GMGCoordinator
@@ -45,7 +44,6 @@ class GMGGrillClimate(GMGBaseEntity, ClimateEntity):
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_target_temperature_step = GRILL_TEMP_STEP_F
     _attr_min_temp = MIN_GRILL_TEMP_F
-    _attr_max_temp = MAX_GRILL_TEMP_F
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.FAN_ONLY]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
@@ -57,6 +55,11 @@ class GMGGrillClimate(GMGBaseEntity, ClimateEntity):
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.info.serial}_climate"
+
+    @property
+    def max_temp(self) -> float:
+        """Upper setpoint bound — the user-configurable grill ceiling."""
+        return self.coordinator.max_grill_temp_f
 
     @property
     def hvac_mode(self) -> HVACMode:

@@ -29,10 +29,14 @@ from .const import (
     CONF_AUTO_COOK_DEV_MODE,
     CONF_AUTO_COOK_ENABLED,
     CONF_AUTO_COOK_PUSH,
+    CONF_MAX_GRILL_TEMP_F,
     CONF_SCAN_INTERVAL,
+    DEFAULT_MAX_GRILL_TEMP_F,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     LOGGER,
+    MAX_GRILL_TEMP_F,
+    MIN_GRILL_TEMP_F,
 )
 from .cook_manager import CookManager
 
@@ -65,15 +69,22 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
             ),
             always_update=False,
         )
+        self.max_grill_temp_f = DEFAULT_MAX_GRILL_TEMP_F
         self.cook_manager = CookManager(hass, self)
         self._refresh_cook_options(entry)
 
     def _refresh_cook_options(self, entry: GMGConfigEntry) -> None:
         """Push current options-flow values into the cook manager."""
+        raw_max = entry.options.get(CONF_MAX_GRILL_TEMP_F, DEFAULT_MAX_GRILL_TEMP_F)
+        # Bound to the hardware-safe window regardless of what is stored.
+        self.max_grill_temp_f = int(
+            max(MIN_GRILL_TEMP_F, min(MAX_GRILL_TEMP_F, raw_max))
+        )
         self.cook_manager.configure(
             auto_cook=bool(entry.options.get(CONF_AUTO_COOK_ENABLED, False)),
             dev_mode=bool(entry.options.get(CONF_AUTO_COOK_DEV_MODE, False)),
             push=bool(entry.options.get(CONF_AUTO_COOK_PUSH, False)),
+            max_pit_f=self.max_grill_temp_f,
         )
 
     async def _async_setup(self) -> None:
@@ -142,8 +153,13 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
         return snapshot
 
     async def async_set_grill_temp(self, f: int) -> None:
-        """Set the grill setpoint temperature in Fahrenheit."""
-        await self._call(self.client.async_set_grill_temp, f)
+        """Set the grill setpoint temperature in Fahrenheit.
+
+        Clamped to [MIN_GRILL_TEMP_F, configured max] so neither a manual
+        write nor the auto-cook loop can exceed the user's ceiling.
+        """
+        clamped = int(max(MIN_GRILL_TEMP_F, min(self.max_grill_temp_f, f)))
+        await self._call(self.client.async_set_grill_temp, clamped)
 
     async def async_set_probe_target(self, probe: int, f: int) -> None:
         """Set the target temperature for a meat probe."""

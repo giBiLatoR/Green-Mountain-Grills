@@ -137,14 +137,25 @@ class CookManager:
         self._auto_cook_enabled = False
         self._dev_mode = False
         self._push_enabled = False
+        # Upper pit clamp; overridden from options. Never exceeds PIT_CLAMP_MAX_F.
+        self._max_pit_f = PIT_CLAMP_MAX_F
 
     # --- lifecycle ----------------------------------------------------------
 
-    def configure(self, *, auto_cook: bool, dev_mode: bool, push: bool) -> None:
+    def configure(
+        self,
+        *,
+        auto_cook: bool,
+        dev_mode: bool,
+        push: bool,
+        max_pit_f: int = PIT_CLAMP_MAX_F,
+    ) -> None:
         """Refresh option-flow flags (called by coordinator on options update)."""
         self._auto_cook_enabled = auto_cook
         self._dev_mode = dev_mode
         self._push_enabled = push
+        # Honor the user's ceiling, but never above the hard safety cap.
+        self._max_pit_f = max(PIT_CLAMP_MIN_F, min(PIT_CLAMP_MAX_F, int(max_pit_f)))
 
     async def async_init_db(self) -> None:
         """Create schema and import meat reference data if missing."""
@@ -251,7 +262,7 @@ class CookManager:
         if cook_hrs <= 0.25:
             raise CookManagerError("not enough cook time after rest + preheat budget")
         pit_target = find_exact_temp(meat_key, weight_lbs, cook_hrs)
-        pit_target = max(PIT_CLAMP_MIN_F, min(PIT_CLAMP_MAX_F, round(pit_target)))
+        pit_target = max(PIT_CLAMP_MIN_F, min(self._max_pit_f, round(pit_target)))
         projection = compute_at(meat_key, weight_lbs, pit_target)
         if projection is None:
             raise CookManagerError("physics model failed to converge")
@@ -505,7 +516,7 @@ class CookManager:
         max_delta = max(1.0, MAX_DELTA_PCT * target)
         if delta > 0:
             adjust = min(max_delta, delta * 0.5)
-            new_set = min(PIT_CLAMP_MAX_F, snapshot.grill_set_temp + round(adjust))
+            new_set = min(self._max_pit_f, snapshot.grill_set_temp + round(adjust))
         else:
             # Ahead: only step down toward original target.
             if snapshot.grill_set_temp <= target:
@@ -526,7 +537,7 @@ class CookManager:
         session.last_adj_at = now
 
     async def _set_pit_target(self, pit_f: int, *, reason: str) -> None:
-        clamped = max(PIT_CLAMP_MIN_F, min(PIT_CLAMP_MAX_F, pit_f))
+        clamped = max(PIT_CLAMP_MIN_F, min(self._max_pit_f, pit_f))
         try:
             await self.coordinator.async_set_grill_temp(clamped)
         except Exception:  # noqa: BLE001 — control loop must not crash poll

@@ -135,7 +135,9 @@ UI.
   matching MAC prefix on the network.
 - **Manual entry** is available for routed networks where broadcast
   discovery is not viable.
-- **Options**: scan interval slider (default `15` seconds; UI warns below `5`), plus Auto Cook enable/disable and dev mode toggle.
+- **Options**: scan interval slider (default `15` seconds; UI warns below `5`),
+  a **Maximum grill temperature** slider (see below), plus Auto Cook
+  enable/disable, dev mode, and push-notification toggles.
 
 ## Entities
 
@@ -301,16 +303,53 @@ system (°C here in metric land), so the dashboards convert to °F with
 > a fixed number, so `now() + finish_in_hours` slides forward by a minute every
 > minute. Using the remaining-minutes sensor keeps the clock steady.
 
-### Auto Cook checklist (so the phase isn't stuck on *idle*)
+### Using Auto Cook, start to finish
 
-1. **Enable Auto Cook** in the integration options (it's off by default). The
-   per-poll control loop does nothing while it's disabled, so the phase never
-   leaves *idle*.
-2. Turn **Cruise Control** on, pick meat/weight/finish time, press
-   **Start Auto-Cook**.
-3. Put the meat on *after* the grill is hot — the cook-start detector looks for
-   a sharp probe-temperature **drop** (cold meat going on). A probe already
-   buried in warm meat won't trigger it.
+A full cook, step by step:
+
+1. **Turn Auto Cook on once.** Settings → Devices & Services → Green Mountain
+   Grills → **Configure** → tick **Enable Auto Cook**, then Submit. (The
+   per-poll control loop does nothing while this is off, so the cook phase never
+   leaves *idle*. You only need to do this once.)
+2. **Set your inputs.** On the dashboard turn **Cruise Control** on, then pick:
+   - **Meat type** (21 cuts), **Cook mode**, **Primary probe** (1 or 2)
+   - **Meat weight** (kg) and **Finish in** (hours from now you want to eat)
+3. **Press ▶ Start Auto-Cook.** The integration runs a pre-flight check, picks
+   the **start temperature** (shown as *Auto Start Temp*), powers the grill on,
+   and begins **preheating**.
+4. **Load the meat once the grill is hot.** When you push the cold probe into
+   the meat, its reading craters — that ~30°F-in-a-minute **drop** is how the
+   system knows the cook has started. (If the probe is already buried in the
+   meat and only rising, it can't see a drop and will sit in *waiting for meat*.
+   Briefly lift the probe into the open grill, then re-seat it in the meat to
+   create the drop.)
+5. **Watch it track.** The dashboard now shows **Pace** (🟢/🔵/🔴 ahead or
+   behind), **Time Remaining**, **Est. Ready At**, and the **Cook Progress vs
+   Plan** graph (food actual vs. the projected curve). The controller makes
+   small, rate-limited grill nudges to stay on schedule — it never powers the
+   grill off on its own.
+6. **Pull when it says so.** At the target temperature you get a notification to
+   take the meat off. Done.
+
+### Setting a maximum grill temperature
+
+Different grills top out at different temperatures, and you may simply not want
+yours run hot. The **Maximum grill temperature** option (Configure → slider, in
+°F) is a single ceiling that applies everywhere:
+
+- the **manual** temperature control (climate card + grill-setpoint number) won't
+  let you set higher than it, and
+- the **Auto Cook** controller is clamped to it too (bounded by a hard 375°F
+  safety cap), so the physics model can never ask for more than your grill can
+  give.
+
+Example: if your grill realistically maxes out around 300°F, set the slider to
+**300**. Nothing — manual or automatic — will command it past that. The default
+is 375°F.
+
+> **Heads-up:** changing options **reloads the integration**, which clears any
+> in-progress Auto Cook session (the session lives in memory only). Set your
+> ceiling **between cooks**, not in the middle of one.
 
 ### Recent fixes (2026-06)
 
@@ -324,6 +363,8 @@ system (°C here in metric land), so the dashboards convert to °F with
   can't break the Start Cook button.
 - Fixed the dashboard "Est. Finish Time" so it no longer creeps forward (now
   uses `cook_remaining_minutes`).
+- Added a **Maximum grill temperature** option that caps both the manual
+  setpoint and the Auto Cook controller (see above).
 
 ## Troubleshooting
 

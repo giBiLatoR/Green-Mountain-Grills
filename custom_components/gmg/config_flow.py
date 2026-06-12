@@ -36,12 +36,17 @@ from .const import (
     CONF_AUTO_COOK_DEV_MODE,
     CONF_AUTO_COOK_ENABLED,
     CONF_AUTO_COOK_PUSH,
+    CONF_MAX_GRILL_TEMP_F,
     CONF_SCAN_INTERVAL,
+    DEFAULT_MAX_GRILL_TEMP_F,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    GRILL_TEMP_STEP_F,
     LOGGER,
+    MAX_GRILL_TEMP_F,
     MAX_SCAN_INTERVAL,
+    MIN_GRILL_TEMP_F,
     MIN_SCAN_INTERVAL,
 )
 if TYPE_CHECKING:
@@ -320,6 +325,17 @@ class GMGOptionsFlow(OptionsFlowWithReload):
                         step=1,
                         unit_of_measurement="s",
                         mode="box",
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAX_GRILL_TEMP_F, default=DEFAULT_MAX_GRILL_TEMP_F
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_GRILL_TEMP_F,
+                        max=MAX_GRILL_TEMP_F,
+                        step=GRILL_TEMP_STEP_F,
+                        unit_of_measurement="°F",
+                        mode="slider",
                     )
                 ),
                 vol.Optional(CONF_AUTO_COOK_ENABLED, default=False): bool,

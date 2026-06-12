@@ -58,10 +58,18 @@
     "step": {
       "init": {
         "data": {
-          "scan_interval": "Polling interval (seconds)"
+          "scan_interval": "Polling interval (seconds)",
+          "max_grill_temp_f": "Maximum grill temperature (°F)",
+          "auto_cook_enabled": "Enable Auto Cook",
+          "auto_cook_dev_mode": "Auto Cook dev-mode logging",
+          "auto_cook_push_notifications": "Push notifications for cook events"
         },
         "data_description": {
-          "scan_interval": "How often Home Assistant polls the grill for state. Lower values give snappier updates but more network chatter."
+          "scan_interval": "How often Home Assistant polls the grill for state. Lower values give snappier updates but more network chatter.",
+          "max_grill_temp_f": "Ceiling for the grill setpoint. Caps both the manual temperature slider and the auto-cook controller, so the grill is never told to go hotter than this. Set it to your grill's real-world maximum.",
+          "auto_cook_enabled": "Run the physics-based auto-cook controller on every poll. Disabled by default.",
+          "auto_cook_dev_mode": "Log every poll into SQLite during active cooks for later analysis.",
+          "auto_cook_push_notifications": "Mirror persistent notifications to any mobile_app.* notify services."
         }
       }
     }
@@ -125,6 +133,38 @@
       },
       "model": {
         "name": "Model"
+      },
+      "cook_state": {
+        "name": "Cook state",
+        "state": {
+          "idle": "Idle",
+          "planned": "Planned",
+          "preheating": "Preheating",
+          "waiting_meat": "Waiting for meat",
+          "cooking": "Cooking",
+          "approaching": "Approaching pull",
+          "pull_reached": "Pull reached",
+          "complete": "Complete",
+          "aborted": "Aborted"
+        }
+      },
+      "cook_meat": {
+        "name": "Cook meat"
+      },
+      "cook_elapsed_minutes": {
+        "name": "Cook elapsed"
+      },
+      "cook_remaining_minutes": {
+        "name": "Cook remaining"
+      },
+      "cook_expected_probe_temp": {
+        "name": "Cook expected probe temperature"
+      },
+      "cook_pit_target": {
+        "name": "Cook pit target"
+      },
+      "cook_pull_temp": {
+        "name": "Cook pull temperature"
       }
     },
     "binary_sensor": {
@@ -157,6 +197,9 @@
       },
       "cooking": {
         "name": "Cooking"
+      },
+      "cook_on_schedule": {
+        "name": "Cook on schedule"
       }
     },
     "number": {
@@ -168,6 +211,12 @@
       },
       "probe_2_target": {
         "name": "Probe 2 target"
+      },
+      "cook_weight_kg": {
+        "name": "Cook weight"
+      },
+      "cook_finish_in_hours": {
+        "name": "Cook finish in"
       }
     },
     "button": {
@@ -179,6 +228,28 @@
       },
       "cold_smoke": {
         "name": "Cold smoke"
+      },
+      "start_cook": {
+        "name": "Start auto cook"
+      },
+      "abort_cook": {
+        "name": "Abort auto cook"
+      }
+    },
+    "select": {
+      "cook_meat_type": {
+        "name": "Cook meat type"
+      },
+      "cook_mode": {
+        "name": "Cook mode",
+        "state": {
+          "set_and_forget": "Set and forget",
+          "autonomous": "Autonomous",
+          "coach": "Coach"
+        }
+      },
+      "cook_probe": {
+        "name": "Cook probe"
       }
     }
   },
@@ -232,6 +303,25 @@
           "name": "Grill",
           "description": "Which grill to refresh."
         }
+      }
+    },
+    "start_cook": {
+      "name": "Start auto cook",
+      "description": "Plan and start an auto-cook session. Must be enabled in options first.",
+      "fields": {
+        "config_entry_id": {"name": "Grill", "description": "Which grill to use."},
+        "meat_key": {"name": "Meat", "description": "Reference meat type from the cook database."},
+        "weight_kg": {"name": "Weight (kg)", "description": "Meat weight in kilograms."},
+        "probe": {"name": "Probe", "description": "Probe to track (1 or 2)."},
+        "mode": {"name": "Mode", "description": "Set-and-forget, autonomous, or coach."},
+        "finish_in_hours": {"name": "Finish in (hours)", "description": "Hours from now until ready-to-serve."}
+      }
+    },
+    "abort_cook": {
+      "name": "Abort auto cook",
+      "description": "Cancel the active auto-cook session. Does NOT power the grill off.",
+      "fields": {
+        "config_entry_id": {"name": "Grill", "description": "Which grill."}
       }
     }
   }

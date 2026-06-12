@@ -30,11 +30,16 @@ CONF_AUTO_COOK_ENABLED = "auto_cook_enabled"
 CONF_AUTO_COOK_DEV_MODE = "auto_cook_dev_mode"
 CONF_AUTO_COOK_PUSH = "auto_cook_push_notifications"
 
+# User-configurable ceiling for the grill setpoint (manual + auto-cook).
+CONF_MAX_GRILL_TEMP_F = "max_grill_temp_f"
+
 MANUFACTURER = "Green Mountain Grills"
 
 MIN_GRILL_TEMP_F = 150
 MAX_GRILL_TEMP_F = 550
 GRILL_TEMP_STEP_F = 5
+# Default ceiling exposed in options; bounded by [MIN_GRILL_TEMP_F, MAX_GRILL_TEMP_F].
+DEFAULT_MAX_GRILL_TEMP_F = 375
 MIN_PROBE_TARGET_F = 32
 MAX_PROBE_TARGET_F = 257
 
