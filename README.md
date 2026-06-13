@@ -312,9 +312,23 @@ is registered.
   *Cook Progress vs Plan* graph (omit it with `show_graph: false`)
 
 **Overlay images.** A neutral smoker silhouette ships as the default. To use a
-real picture of your model, drop a transparent PNG into
-`custom_components/gmg/static/models/` and map your `model_id` to it in the
-`MODEL_IMAGES` table at the top of `static/gmg-smoker-strategy.js`.
+real picture of your model, drop a **transparent PNG named `<model_id>.png`**
+into `custom_components/gmg/static/models/` — it is then picked up
+**automatically**, no code edit needed. The `model_id` values:
+
+| id | model | id | model | id | model |
+|----|-------|----|-------|----|-------|
+| 0 | Davy Crockett | 6 | Ledge Prime+ | 12 | Jim Bowie Prime+ |
+| 1 | Trek | 7 | Peak Prime+ | 13 | Daniel Boone Prime 2.0 |
+| 2 | Daniel Boone | 8 | Trek Prime 2.0 | 14 | Jim Bowie Prime 2.0 |
+| 3 | Jim Bowie | 9 | Ledge Prime 2.0 | 15 | Trek Prime+ |
+| 4 | Ledge | 10 | Peak Prime 2.0 | | |
+| 5 | Peak | 11 | Daniel Boone Prime+ | | |
+
+So a Jim Bowie owner saves their cut-out PNG as `static/models/3.png`. These
+are the WiFi-capable models the local protocol supports. (The integration does
+not ship product photos — they're copyright GMG; supply your own transparent
+PNGs.)
 
 > This strategy is **experimental**. It does not depend on any personal helper
 > entities — contrast with the hand-built popup below, which uses extra HACS

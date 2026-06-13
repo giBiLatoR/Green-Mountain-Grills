@@ -19,19 +19,32 @@
 
 const STATIC = "/gmg_static";
 
-// model_id -> bundled overlay image. Drop per-model transparent PNGs into
-// custom_components/gmg/static/models/ and map them here. Falls back to the
-// generic silhouette shipped with the integration.
-const MODEL_IMAGES = {
-  // 0: `${STATIC}/models/davy_crockett.png`,
-  // 1: `${STATIC}/models/daniel_boone.png`,
-  // 2: `${STATIC}/models/jim_bowie.png`,
-};
+const GENERIC_IMAGE = `${STATIC}/smoker-generic.svg`;
 
-function pickImage(device) {
+// Optional explicit overrides: model_id -> image url. Usually unnecessary —
+// prefer the filename convention below.
+const MODEL_IMAGES = {};
+
+// Auto-discovery convention: drop a transparent PNG named "<model_id>.png" into
+// custom_components/gmg/static/models/ and it is used automatically — no code
+// edit needed. model_id values come from the integration's MODEL_NAMES table:
+//   0 Davy Crockett   1 Trek              2 Daniel Boone        3 Jim Bowie
+//   4 Ledge           5 Peak              6 Ledge Prime+        7 Peak Prime+
+//   8 Trek Prime 2.0  9 Ledge Prime 2.0  10 Peak Prime 2.0     11 Daniel Boone Prime+
+//   12 Jim Bowie Prime+  13 Daniel Boone Prime 2.0  14 Jim Bowie Prime 2.0  15 Trek Prime+
+async function resolveImage(device) {
   const id = device && device.model_id;
   if (id != null && MODEL_IMAGES[id]) return MODEL_IMAGES[id];
-  return `${STATIC}/smoker-generic.svg`;
+  if (id != null) {
+    const url = `${STATIC}/models/${id}.png`;
+    try {
+      const r = await fetch(url, { method: "HEAD" });
+      if (r.ok) return url;
+    } catch (err) {
+      /* fall through to the generic silhouette */
+    }
+  }
+  return GENERIC_IMAGE;
 }
 
 function findDevice(hass, serial) {
@@ -292,7 +305,7 @@ function buildGraph(e) {
   };
 }
 
-function buildView(hass, config) {
+async function buildView(hass, config) {
   const device = findDevice(hass, config && config.serial);
   if (!device) {
     return {
@@ -336,7 +349,7 @@ function buildView(hass, config) {
   };
 
   const cards = compact([
-    buildOverlay(pickImage(device), e),
+    buildOverlay(await resolveImage(device), e),
     buildControls(e),
     (config && config.show_graph === false) ? null : buildGraph(e),
   ]);
@@ -346,13 +359,13 @@ function buildView(hass, config) {
 
 class GmgSmokerViewStrategy extends HTMLElement {
   static async generate(config, hass) {
-    return buildView(hass, config);
+    return await buildView(hass, config);
   }
 }
 
 class GmgSmokerDashboardStrategy extends HTMLElement {
   static async generate(config, hass) {
-    const view = buildView(hass, config);
+    const view = await buildView(hass, config);
     view.title = "Smoker";
     view.path = "smoker";
     view.icon = "mdi:grill";
