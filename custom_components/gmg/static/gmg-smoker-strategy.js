@@ -373,8 +373,60 @@ class GmgSmokerDashboardStrategy extends HTMLElement {
   }
 }
 
+// ---- Custom card ----
+// The headline way to use this: in any dashboard, Edit -> Add Card -> "GMG
+// Smoker" (or YAML `type: custom:gmg-smoker-card`). Builds the same overlay +
+// controls (+ graph) as ONE card, auto-resolved from your GMG device.
+class GmgSmokerCard extends HTMLElement {
+  setConfig(config) {
+    this._config = config || {};
+    this._built = false;
+    this._inner = null;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!hass) return;
+    if (!this._built) {
+      this._built = true;
+      this._render(hass);
+    } else if (this._inner) {
+      this._inner.hass = hass;
+    }
+  }
+
+  async _render(hass) {
+    const helpers = await window.loadCardHelpers();
+    const view = await buildView(hass, this._config);
+    // buildView returns a panel wrapper; mount its single inner card.
+    const inner = view.cards && view.cards.length ? view.cards[0] : view;
+    const el = helpers.createCardElement(inner);
+    el.hass = hass;
+    this._inner = el;
+    this.replaceChildren(el);
+  }
+
+  getCardSize() {
+    return 12;
+  }
+
+  static getStubConfig() {
+    return { type: "custom:gmg-smoker-card" };
+  }
+}
+
+customElements.define("gmg-smoker-card", GmgSmokerCard);
+
+// Lovelace strategies (alternative: generate a whole view / dashboard).
 customElements.define("ll-strategy-view-gmg-smoker", GmgSmokerViewStrategy);
 customElements.define("ll-strategy-dashboard-gmg-smoker", GmgSmokerDashboardStrategy);
 
 window.customCards = window.customCards || [];
-console.info("%c GMG-SMOKER-STRATEGY %c loaded ", "background:#ff6d00;color:#fff", "");
+window.customCards.push({
+  type: "gmg-smoker-card",
+  name: "GMG Smoker",
+  description:
+    "Auto-built smoker overlay, controls and progress graph for your Green Mountain Grill.",
+  preview: false,
+});
+console.info("%c GMG-SMOKER %c card + strategy loaded ", "background:#ff6d00;color:#fff", "");
