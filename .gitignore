@@ -75,3 +75,7 @@ secrets.yaml
 *.local.yaml
 .pi/
 HANDOFF.md
+
+# Per-model overlay images are user-supplied. Do not commit product photos
+# (GMG marketing images are copyrighted); ship only the mechanism + generic art.
+custom_components/gmg/static/models/*.png
