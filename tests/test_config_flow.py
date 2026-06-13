@@ -105,7 +105,7 @@ async def test_dhcp_discovery_creates_entry(hass: HomeAssistant, mock_client) ->
     discovery = DhcpServiceInfo(
         ip="192.0.2.10",
         hostname="gmg-grill",
-        macaddress="aa:bb:cc:dd:ee:ff",
+        macaddress="aabbccddeeff",
     )
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_DHCP}, data=discovery
@@ -127,7 +127,7 @@ async def test_dhcp_discovery_updates_existing(
     discovery = DhcpServiceInfo(
         ip="192.0.2.55",
         hostname="gmg-grill",
-        macaddress="aa:bb:cc:dd:ee:ff",
+        macaddress="aabbccddeeff",
     )
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_DHCP}, data=discovery

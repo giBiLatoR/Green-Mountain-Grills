@@ -1,10 +1,10 @@
 {
   "domain": "gmg",
   "name": "Green Mountain Grills",
-  "after_dependencies": ["dhcp", "network"],
+  "after_dependencies": ["dhcp", "frontend", "network"],
   "codeowners": ["@hallyaus"],
   "config_flow": true,
-  "dependencies": ["http", "frontend"],
+  "dependencies": ["http"],
   "dhcp": [
     { "hostname": "gmg-*" },
     { "registered_devices": true }
