@@ -365,7 +365,7 @@ class CookManager:
 
     # --- per-poll loop ------------------------------------------------------
 
-    async def update(self, snapshot: GMGSnapshot) -> None:  # noqa: C901, PLR0912
+    async def update(self, snapshot: GMGSnapshot) -> None:  # noqa: C901, PLR0912, PLR0915
         """Run the control loop once after a successful poll."""
         if not self._auto_cook_enabled or self.session is None:
             return
@@ -403,6 +403,17 @@ class CookManager:
 
         # State transitions ------------------------------------------------
         if session.state is CookState.PREHEATING:
+            # Short-on-time path: a sharp probe drop during preheat means the
+            # meat went on before the grill settled — start cooking right away
+            # instead of waiting for the "grill ready" prompt.
+            if self._detect_cook_start(session):
+                session.state = CookState.COOKING
+                session.cook_started_at = now
+                self._notify(
+                    title="Cook started",
+                    message="Meat detected during preheat — tracking now.",
+                )
+                return
             if abs(snapshot.grill_temp - session.pit_target_f) <= PREHEAT_BAND_F:
                 if session.preheat_ready_since is None:
                     session.preheat_ready_since = now
