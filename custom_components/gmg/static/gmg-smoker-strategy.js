@@ -293,7 +293,22 @@ function buildControls(e) {
   return { type: "entities", title: "Smoker Controls", show_header_toggle: false, state_color: true, entities: rows };
 }
 
-function buildGraph(e) {
+// Window the chart to the live cook. apexcharts-card ends the x-axis at "now"
+// by default, so a graph_span of (elapsed + a little) starts the axis at the
+// cook start with no pre-cook dead space, and grows with the cook so long cooks
+// are never truncated. cook_elapsed_minutes is None until COOKING — when there
+// is no active cook we fall back to a short window. Bucketed to 10-minute steps
+// so the custom card rebuilds at most every ~10 min (never per-minute), while
+// the bucket guarantees the span always covers the elapsed time (no truncation).
+const IDLE_GRAPH_SPAN = "4h";
+function graphSpan(hass, elapsedEntity) {
+  const st = elapsedEntity && hass && hass.states ? hass.states[elapsedEntity] : null;
+  const min = st ? Number(st.state) : NaN;
+  if (!Number.isFinite(min) || min <= 0) return IDLE_GRAPH_SPAN;
+  return `${Math.max(10, Math.ceil((min + 1) / 10) * 10)}min`;
+}
+
+function buildGraph(e, hass) {
   const series = compact([
     e.probe1 && { entity: e.probe1, name: "Food actual", color: "#2196f3", stroke_width: 3, curve: "smooth" },
     e.expected && { entity: e.expected, name: "Food expected", color: "#90caf9", stroke_width: 2, curve: "smooth" },
@@ -303,7 +318,7 @@ function buildGraph(e) {
   return {
     type: "custom:apexcharts-card",
     header: { show: true, title: "Cook Progress vs Plan", show_states: true },
-    graph_span: "8h",
+    graph_span: graphSpan(hass, e.elapsed),
     series,
   };
 }
@@ -331,6 +346,7 @@ async function buildView(hass, config) {
     probe2: byKey(ents, "sensor", "probe_2_temperature"),
     cookState: byKey(ents, "sensor", "cook_state"),
     cookMeat: byKey(ents, "sensor", "cook_meat"),
+    elapsed: byKey(ents, "sensor", "cook_elapsed_minutes"),
     remaining: byKey(ents, "sensor", "cook_remaining_minutes"),
     pitTarget: byKey(ents, "sensor", "cook_pit_target"),
     expected: byKey(ents, "sensor", "cook_expected_probe_temp"),
@@ -355,7 +371,7 @@ async function buildView(hass, config) {
   const cards = compact([
     buildOverlay(await resolveImage(device), e),
     buildControls(e),
-    (config && config.show_graph === false) ? null : buildGraph(e),
+    (config && config.show_graph === false) ? null : buildGraph(e, hass),
   ]);
 
   return { type: "panel", cards: [{ type: "vertical-stack", cards }] };
@@ -386,13 +402,35 @@ class GmgSmokerCard extends HTMLElement {
     this._config = config || {};
     this._built = false;
     this._inner = null;
+    this._sig = null;
+  }
+
+  // Rebuild the inner card when the cook phase changes or the elapsed-derived
+  // graph window grows a bucket; otherwise just forward hass. Keeps the chart
+  // tracking the live cook (its graph_span is baked in at build time) without
+  // re-rendering on every state update. Cheap in-memory resolution, no awaits.
+  _graphSig(hass) {
+    if (this._config && this._config.show_graph === false) return "no-graph";
+    try {
+      const device = findDevice(hass, this._config && this._config.serial);
+      if (!device) return "no-device";
+      const ents = deviceEntities(hass, device.id);
+      const cs = byKey(ents, "sensor", "cook_state");
+      const el = byKey(ents, "sensor", "cook_elapsed_minutes");
+      const phase = cs && hass.states[cs] ? hass.states[cs].state : "?";
+      return `${phase}|${graphSpan(hass, el)}`;
+    } catch (err) {
+      return "static";
+    }
   }
 
   set hass(hass) {
     this._hass = hass;
     if (!hass) return;
-    if (!this._built) {
+    const sig = this._graphSig(hass);
+    if (!this._built || sig !== this._sig) {
       this._built = true;
+      this._sig = sig;
       this._render(hass);
     } else if (this._inner) {
       this._inner.hass = hass;

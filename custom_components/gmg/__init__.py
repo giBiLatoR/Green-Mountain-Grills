@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -36,6 +37,22 @@ _TEMP_SENSOR_KEYS = (
 _TEMP_NUMBER_KEYS = ("grill_setpoint", "probe_1_target", "probe_2_target")
 
 
+def _asset_version(static_dir: Path) -> str:
+    """Return a short content hash of the dashboard JS for cache-busting.
+
+    Browsers cache ES modules aggressively (the static path is served with
+    ``cache_headers=False``), so a fixed URL keeps serving a stale strategy
+    after an update. Appending a content-derived query string makes every change
+    to the file produce a new URL the browser refetches. Runs in the executor —
+    keep it a plain sync function (no blocking file IO on the event loop).
+    """
+    asset = static_dir / "gmg-smoker-strategy.js"
+    try:
+        return hashlib.sha256(asset.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "dev"
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa: ARG001
     """Register integration-wide services and dashboard assets exactly once."""
     async_setup_services(hass)
@@ -52,7 +69,8 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         await hass.http.async_register_static_paths(
             [StaticPathConfig(STATIC_URL_PATH, str(static_dir), cache_headers=False)]
         )
-        add_extra_js_url(hass, f"{STATIC_URL_PATH}/gmg-smoker-strategy.js")
+        version = await hass.async_add_executor_job(_asset_version, static_dir)
+        add_extra_js_url(hass, f"{STATIC_URL_PATH}/gmg-smoker-strategy.js?v={version}")
     except Exception:  # noqa: BLE001 — never block setup on a dashboard extra
         LOGGER.exception("failed to register GMG dashboard assets")
         return
