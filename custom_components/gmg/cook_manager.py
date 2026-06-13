@@ -9,9 +9,11 @@ Hard rules (never violated here):
   * Pit setpoint clamped to [150°F, 375°F].
   * Auto power-on only on PLANNED→PREHEATING.
 """
+
 from __future__ import annotations
 
 import json
+
 try:
     import sqlite3
 except ModuleNotFoundError:  # Python build without the sqlite3 C extension
@@ -23,14 +25,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from homeassistant.components import persistent_notification
-from homeassistant.core import HomeAssistant
 
 from .api import GMGSnapshot, PowerState
 from .const import LOGGER
 from .cook_physics import (
     CP_MEATS,
-    STALL_DETECT_HIGH_F,
-    STALL_DETECT_LOW_F,
     CookProjection,
     compute_at,
     expected_probe_at,
@@ -39,20 +38,22 @@ from .cook_physics import (
 )
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
     from .coordinator import GMGCoordinator
 
 # Guardrails (CONTEXT.md) ----------------------------------------------------
 PIT_CLAMP_MIN_F = 150
 PIT_CLAMP_MAX_F = 375
-COOK_START_DROP_F = 30           # Probe drop trigger for cook-start detection.
-COOK_START_WINDOW_S = 60         # Within 1 minute.
-PREHEAT_BAND_F = 10              # Pit within ±10°F of setpoint.
-PREHEAT_HOLD_S = 180             # Sustained 3 min.
-APPROACHING_BAND_F = 10          # Within 10°F of pull.
-MAX_DELTA_PCT = 0.02             # ±2% of pit target per adjustment.
-MIN_ADJ_INTERVAL_BASE_S = 60     # 60s at 0.5% scaling to 180s at 2.0%.
+COOK_START_DROP_F = 30  # Probe drop trigger for cook-start detection.
+COOK_START_WINDOW_S = 60  # Within 1 minute.
+PREHEAT_BAND_F = 10  # Pit within ±10°F of setpoint.
+PREHEAT_HOLD_S = 180  # Sustained 3 min.
+APPROACHING_BAND_F = 10  # Within 10°F of pull.
+MAX_DELTA_PCT = 0.02  # ±2% of pit target per adjustment.
+MIN_ADJ_INTERVAL_BASE_S = 60  # 60s at 0.5% scaling to 180s at 2.0%.
 ADJ_INTERVAL_SPAN_S = 120
-PIT_ERROR_TRIP_F = 200           # Was above this, dropped below 150 → fail.
+PIT_ERROR_TRIP_F = 200  # Was above this, dropped below 150 → fail.
 PROBE_UNPLUGGED_SENTINEL_F = 89  # Probe pulled from meat.
 DB_FILENAME = "gmg_cooks.db"
 
@@ -129,7 +130,8 @@ class CookManager:
     is never blocked.
     """
 
-    def __init__(self, hass: HomeAssistant, coordinator: "GMGCoordinator") -> None:
+    def __init__(self, hass: HomeAssistant, coordinator: GMGCoordinator) -> None:
+        """Initialize the cook manager."""
         self.hass = hass
         self.coordinator = coordinator
         self.session: CookSession | None = None
@@ -298,8 +300,7 @@ class CookManager:
         """Create a session and transition PLANNED → PREHEATING."""
         if sqlite3 is None:
             raise CookManagerError(
-                "Auto Cook requires the sqlite3 module, "
-                "which is unavailable on this Python build"
+                "Auto Cook requires the sqlite3 module, which is unavailable on this Python build"
             )
         if self.session is not None and self.session.state not in (
             CookState.COMPLETE,
@@ -358,23 +359,19 @@ class CookManager:
         if self.session is None:
             return
         self.session.state = CookState.ABORTED
-        await self.hass.async_add_executor_job(
-            self._complete_session_sync, self.session, "aborted"
-        )
+        await self.hass.async_add_executor_job(self._complete_session_sync, self.session, "aborted")
         self._notify(title="Auto-Cook aborted", message="Session cancelled.")
         self.session = None
 
     # --- per-poll loop ------------------------------------------------------
 
-    async def update(self, snapshot: GMGSnapshot) -> None:
-        """Called by coordinator after each successful poll."""
+    async def update(self, snapshot: GMGSnapshot) -> None:  # noqa: C901, PLR0912
+        """Run the control loop once after a successful poll."""
         if not self._auto_cook_enabled or self.session is None:
             return
         session = self.session
         now = time.time()
-        probe_f = (
-            snapshot.probe_1_temp if session.probe_index == 1 else snapshot.probe_2_temp
-        )
+        probe_f = snapshot.probe_1_temp if session.probe_index == 1 else snapshot.probe_2_temp
         if probe_f is not None:
             session.probe_history.append(_ProbeSample(now, float(probe_f)))
             # Bound history to recent samples to keep memory + scan cheap.
@@ -388,7 +385,13 @@ class CookManager:
 
         # Grill failure trip — pit dropped from hot to below safe floor.
         if (
-            session.state in (CookState.PREHEATING, CookState.WAITING_MEAT, CookState.COOKING, CookState.APPROACHING)
+            session.state
+            in (
+                CookState.PREHEATING,
+                CookState.WAITING_MEAT,
+                CookState.COOKING,
+                CookState.APPROACHING,
+            )
             and snapshot.grill_temp < PIT_CLAMP_MIN_F
             and self._was_above(session, PIT_ERROR_TRIP_F)
         ):
@@ -439,7 +442,10 @@ class CookManager:
                     session.state = CookState.APPROACHING
                     self._notify(
                         title="Approaching pull",
-                        message=f"Within {APPROACHING_BAND_F}°F of {pull_f}°F. No further pit adjustments.",
+                        message=(
+                            f"Within {APPROACHING_BAND_F}°F of {pull_f}°F. "
+                            "No further pit adjustments."
+                        ),
                     )
             # Control only during COOKING (not APPROACHING).
             if session.state is CookState.COOKING and probe_f is not None:
@@ -525,10 +531,11 @@ class CookManager:
             new_set = max(target, snapshot.grill_set_temp - round(adjust))
 
         adj_pct = abs(new_set - snapshot.grill_set_temp) / max(target, 1)
-        min_interval = MIN_ADJ_INTERVAL_BASE_S + (
-            (adj_pct - 0.005) / 0.015
-        ) * ADJ_INTERVAL_SPAN_S
-        min_interval = max(MIN_ADJ_INTERVAL_BASE_S, min(min_interval, MIN_ADJ_INTERVAL_BASE_S + ADJ_INTERVAL_SPAN_S))
+        min_interval = MIN_ADJ_INTERVAL_BASE_S + ((adj_pct - 0.005) / 0.015) * ADJ_INTERVAL_SPAN_S
+        min_interval = max(
+            MIN_ADJ_INTERVAL_BASE_S,
+            min(min_interval, MIN_ADJ_INTERVAL_BASE_S + ADJ_INTERVAL_SPAN_S),
+        )
         if now - session.last_adj_at < min_interval:
             return
         if new_set == snapshot.grill_set_temp:
@@ -658,7 +665,5 @@ class CookManager:
             if critical:
                 data["data"] = {"push": {"sound": "default"}}
             self.hass.async_create_task(
-                self.hass.services.async_call(
-                    "notify", svc, data, blocking=False
-                )
+                self.hass.services.async_call("notify", svc, data, blocking=False)
             )

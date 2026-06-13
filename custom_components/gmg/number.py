@@ -1,8 +1,10 @@
 """Number platform for the Green Mountain Grills integration."""
+
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import contextlib
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from homeassistant.components.number import (
     NumberDeviceClass,
@@ -11,9 +13,7 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.const import UnitOfMass, UnitOfTemperature, UnitOfTime
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
@@ -29,8 +29,15 @@ from .const import (
     MIN_GRILL_TEMP_F,
     MIN_PROBE_TARGET_F,
 )
-from .coordinator import GMGConfigEntry, GMGCoordinator
 from .entity import GMGBaseEntity
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from .coordinator import GMGConfigEntry, GMGCoordinator
 
 PARALLEL_UPDATES = 1
 
@@ -84,7 +91,7 @@ NUMBERS: tuple[GMGNumberDescription, ...] = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    hass: HomeAssistant,  # noqa: ARG001
     entry: GMGConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
@@ -148,7 +155,7 @@ class GMGNumber(GMGBaseEntity, NumberEntity):
             await self.entity_description.set_fn(self.coordinator, int(value))
         except HomeAssistantError:
             raise
-        except Exception as err:  # noqa: BLE001 - defensive boundary
+        except Exception as err:
             LOGGER.exception("Unexpected error setting %s", self.entity_description.key)
             raise HomeAssistantError(str(err)) from err
 
@@ -169,6 +176,7 @@ class GMGCookInputNumber(GMGBaseEntity, NumberEntity, RestoreEntity):
         step: float,
         default: float,
     ) -> None:
+        """Initialize the auto-cook planning-input number."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.info.serial}_{key}"
         self._attr_translation_key = key
@@ -180,18 +188,19 @@ class GMGCookInputNumber(GMGBaseEntity, NumberEntity, RestoreEntity):
         self._key = key
 
     async def async_added_to_hass(self) -> None:
+        """Restore the last value across restarts."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 self._attr_native_value = float(last.state)
-            except (TypeError, ValueError):
-                pass
 
     async def async_set_native_value(self, value: float) -> None:
+        """Store the new planning value locally."""
         self._attr_native_value = value
         self.async_write_ha_state()
 
     @property
-    def available(self) -> bool:  # always available — purely local
+    def available(self) -> bool:
+        """Return True; this helper is purely local and always available."""
         return True

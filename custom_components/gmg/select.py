@@ -1,19 +1,25 @@
 """Select platform: meat type, cook mode, probe selection."""
+
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import LOGGER
 from .cook_manager import CookMode
 from .cook_physics import CP_MEATS
-from .coordinator import GMGConfigEntry, GMGCoordinator
 from .entity import GMGBaseEntity
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from .coordinator import GMGConfigEntry, GMGCoordinator
 
 PARALLEL_UPDATES = 1
 
@@ -49,15 +55,13 @@ SELECTS: tuple[GMGSelectDescription, ...] = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    hass: HomeAssistant,  # noqa: ARG001
     entry: GMGConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up GMG select entities from a config entry."""
     coordinator = entry.runtime_data
-    async_add_entities(
-        GMGSelect(coordinator, description) for description in SELECTS
-    )
+    async_add_entities(GMGSelect(coordinator, description) for description in SELECTS)
 
 
 class GMGSelect(GMGBaseEntity, SelectEntity, RestoreEntity):
@@ -70,6 +74,7 @@ class GMGSelect(GMGBaseEntity, SelectEntity, RestoreEntity):
         coordinator: GMGCoordinator,
         description: GMGSelectDescription,
     ) -> None:
+        """Initialize the select."""
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.info.serial}_{description.key}"
@@ -84,6 +89,7 @@ class GMGSelect(GMGBaseEntity, SelectEntity, RestoreEntity):
             self._attr_current_option = last.state
 
     async def async_select_option(self, option: str) -> None:
+        """Validate and apply the selected option."""
         if option not in self._attr_options:
             LOGGER.warning("select %s rejected option %s", self.entity_description.key, option)
             return

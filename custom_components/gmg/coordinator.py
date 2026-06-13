@@ -1,11 +1,12 @@
 """DataUpdateCoordinator for the GMG integration."""
+
 from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
@@ -17,6 +18,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import (
     GMGClient,
     GMGConnectionError,
+    GMGError,
     GMGGrillInfo,
     GMGInvalidValueError,
     GMGProtocolError,
@@ -24,7 +26,6 @@ from .api import (
     GMGSnapshot,
     GMGTimeoutError,
 )
-from .api import GMGError
 from .const import (
     CONF_AUTO_COOK_DEV_MODE,
     CONF_AUTO_COOK_ENABLED,
@@ -39,6 +40,11 @@ from .const import (
     MIN_GRILL_TEMP_F,
 )
 from .cook_manager import CookManager
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from homeassistant.core import HomeAssistant
 
 type GMGConfigEntry = ConfigEntry[GMGCoordinator]
 
@@ -77,9 +83,7 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
         """Push current options-flow values into the cook manager."""
         raw_max = entry.options.get(CONF_MAX_GRILL_TEMP_F, DEFAULT_MAX_GRILL_TEMP_F)
         # Bound to the hardware-safe window regardless of what is stored.
-        self.max_grill_temp_f = int(
-            max(MIN_GRILL_TEMP_F, min(MAX_GRILL_TEMP_F, raw_max))
-        )
+        self.max_grill_temp_f = int(max(MIN_GRILL_TEMP_F, min(MAX_GRILL_TEMP_F, raw_max)))
         self.cook_manager.configure(
             auto_cook=bool(entry.options.get(CONF_AUTO_COOK_ENABLED, False)),
             dev_mode=bool(entry.options.get(CONF_AUTO_COOK_DEV_MODE, False)),
@@ -177,7 +181,7 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
         """Engage cold smoke mode."""
         await self._call(self.client.async_cold_smoke)
 
-    async def _call(self, func, /, *args) -> None:
+    async def _call(self, func: Callable[..., Awaitable[None]], /, *args: object) -> None:
         """Invoke a client command and refresh, mapping errors to HA exceptions."""
         try:
             await func(*args)

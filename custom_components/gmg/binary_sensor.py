@@ -1,9 +1,10 @@
 """Binary sensor platform for the Green Mountain Grills integration."""
+
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -11,13 +12,18 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import GMGSnapshot, PowerState
 from .cook_physics import expected_probe_at
-from .coordinator import GMGConfigEntry, GMGCoordinator
 from .entity import GMGBaseEntity
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from .coordinator import GMGConfigEntry, GMGCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -104,15 +110,13 @@ BINARY_SENSORS: tuple[GMGBinarySensorDescription, ...] = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    hass: HomeAssistant,  # noqa: ARG001
     entry: GMGConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up GMG binary sensors from a config entry."""
     coordinator = entry.runtime_data
-    entities: list[BinarySensorEntity] = [
-        GMGBinarySensor(coordinator, d) for d in BINARY_SENSORS
-    ]
+    entities: list[BinarySensorEntity] = [GMGBinarySensor(coordinator, d) for d in BINARY_SENSORS]
     entities.append(GMGCookOnScheduleSensor(coordinator))
     async_add_entities(entities)
 
@@ -144,11 +148,13 @@ class GMGCookOnScheduleSensor(GMGBaseEntity, BinarySensorEntity):
     _attr_translation_key = "cook_on_schedule"
 
     def __init__(self, coordinator: GMGCoordinator) -> None:
+        """Initialize the on-schedule binary sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.info.serial}_cook_on_schedule"
 
     @property
     def is_on(self) -> bool | None:
+        """Return True when the cook is within the projected tolerance band."""
         session = self.coordinator.cook_manager.session
         if session is None or session.cook_started_at is None:
             return None

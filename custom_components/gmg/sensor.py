@@ -1,9 +1,10 @@
 """Sensor platform for the Green Mountain Grills integration."""
+
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,15 +13,20 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature, UnitOfTime
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.typing import StateType
 
 from .api import FireState, PowerState, WarnCode
 from .cook_manager import CookState
 from .cook_physics import CP_MEATS, expected_probe_at
-from .coordinator import GMGConfigEntry, GMGCoordinator
 from .entity import GMGBaseEntity
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+    from homeassistant.helpers.typing import StateType
+
+    from .coordinator import GMGConfigEntry, GMGCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -208,15 +214,14 @@ COOK_SENSORS: tuple[GMGSensorDescription, ...] = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    hass: HomeAssistant,  # noqa: ARG001
     entry: GMGConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up GMG sensors from a config entry."""
     coordinator = entry.runtime_data
     async_add_entities(
-        GMGSensor(coordinator, description)
-        for description in (*SENSORS, *COOK_SENSORS)
+        GMGSensor(coordinator, description) for description in (*SENSORS, *COOK_SENSORS)
     )
 
 

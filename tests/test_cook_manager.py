@@ -3,6 +3,7 @@
 The full state machine requires a live coordinator + snapshots and is exercised
 in HA integration tests separately. Here we only verify the synchronous parts.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -21,16 +22,14 @@ from custom_components.gmg.cook_manager import (
 def manager() -> CookManager:
     """Build a CookManager without touching HA — only pre_flight is exercised."""
     hass = MagicMock()
-    hass.config.path.return_value = "/tmp/test_gmg_cooks.db"
+    hass.config.path.return_value = "/tmp/test_gmg_cooks.db"  # noqa: S108
     coordinator = MagicMock()
     return CookManager(hass, coordinator)
 
 
 def test_pre_flight_clamps_pit_target(manager: CookManager) -> None:
     """pit_target_f always lands in [150, 375]."""
-    pf = manager.pre_flight(
-        meat_key="beef_brisket_packer", weight_kg=5.0, finish_in_hours=20.0
-    )
+    pf = manager.pre_flight(meat_key="beef_brisket_packer", weight_kg=5.0, finish_in_hours=20.0)
     assert PIT_CLAMP_MIN_F <= pf.pit_target_f <= PIT_CLAMP_MAX_F
 
 
@@ -41,22 +40,16 @@ def test_pre_flight_unknown_meat_raises(manager: CookManager) -> None:
 
 def test_pre_flight_zero_weight_raises(manager: CookManager) -> None:
     with pytest.raises(CookManagerError):
-        manager.pre_flight(
-            meat_key="whole_chicken", weight_kg=0.0, finish_in_hours=3.0
-        )
+        manager.pre_flight(meat_key="whole_chicken", weight_kg=0.0, finish_in_hours=3.0)
 
 
 def test_pre_flight_too_soon_raises(manager: CookManager) -> None:
     with pytest.raises(CookManagerError):
-        manager.pre_flight(
-            meat_key="whole_chicken", weight_kg=2.0, finish_in_hours=0.25
-        )
+        manager.pre_flight(meat_key="whole_chicken", weight_kg=2.0, finish_in_hours=0.25)
 
 
 def test_pre_flight_emits_max_hours_warning(manager: CookManager) -> None:
     """Chicken has max 4h; ask for an absurdly long projection."""
-    pf = manager.pre_flight(
-        meat_key="whole_chicken", weight_kg=3.0, finish_in_hours=10.0
-    )
+    pf = manager.pre_flight(meat_key="whole_chicken", weight_kg=3.0, finish_in_hours=10.0)
     # finish=10h forces a very low pit, projection will exceed chicken's 4h cap.
     assert any("max" in w for w in pf.warnings)

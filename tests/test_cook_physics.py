@@ -1,6 +1,8 @@
 """Tests for the cook physics module (pure-Python diffusion model port)."""
+
 from __future__ import annotations
 
+import itertools
 import math
 
 import pytest
@@ -41,7 +43,7 @@ def test_phase_returns_inf_when_unreachable() -> None:
 
 
 def test_compute_at_brisket_low_and_slow() -> None:
-    """10lb brisket @ 225°F should land in 12–24h ballpark (smoking_formula_research)."""
+    """10lb brisket @ 225°F should land in 12-24h ballpark (smoking_formula_research)."""
     res = compute_at("beef_brisket_packer", 10.0, 225.0)
     assert res is not None
     assert isinstance(res, CookProjection)
@@ -92,7 +94,7 @@ def test_expected_probe_monotonic_in_elapsed() -> None:
     res = compute_at("pork_butt_pulled", 8.0, 250.0)
     assert res is not None
     samples = [expected_probe_at(res, h) for h in (0.5, 2.0, 5.0, 9.0, 15.0)]
-    for prev, nxt in zip(samples, samples[1:]):
+    for prev, nxt in itertools.pairwise(samples):
         assert nxt >= prev
 
 

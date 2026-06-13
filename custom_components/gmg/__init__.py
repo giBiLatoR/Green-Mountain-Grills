@@ -1,4 +1,5 @@
 """The Green Mountain Grills integration."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,6 @@ from typing import TYPE_CHECKING
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import HomeAssistant
 
 from .api import GMGClient
 from .const import DEFAULT_PORT, DOMAIN, LOGGER, PLATFORMS
@@ -15,6 +15,7 @@ from .coordinator import GMGConfigEntry, GMGCoordinator
 from .services import async_setup_services, async_unload_services
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers.typing import ConfigType
 
 # Bundled dashboard assets (generic overlay + Lovelace auto-strategy).
@@ -22,7 +23,7 @@ STATIC_URL_PATH = "/gmg_static"
 _FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
 
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa: ARG001
     """Register integration-wide services and dashboard assets exactly once."""
     async_setup_services(hass)
     await _async_register_frontend(hass)
@@ -69,6 +70,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: GMGConfigEntry) -> bool
     return unloaded
 
 
-async def async_migrate_entry(hass: HomeAssistant, entry: GMGConfigEntry) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, entry: GMGConfigEntry) -> bool:  # noqa: ARG001
     """Migrate an old config entry to the current schema."""
     return True

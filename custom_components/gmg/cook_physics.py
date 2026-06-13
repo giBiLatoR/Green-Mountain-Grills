@@ -6,17 +6,21 @@ unit-test in isolation.
 
 Reference: smoking_formula_research.md (heat-diffusion model derivation).
 """
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Physics constants ----------------------------------------------------------
 CP_STALL_START_F = 150  # Lower bound of projection-curve stall region (°F).
-CP_STALL_END_F = 165    # Upper bound of projection-curve stall region (°F).
-CP_RH_PELLET = 12       # Approx RH (%) inside a pellet-smoker firebox.
-CP_TI_F = 38            # Initial meat temp assumed at cook start (°F).
+CP_STALL_END_F = 165  # Upper bound of projection-curve stall region (°F).
+CP_RH_PELLET = 12  # Approx RH (%) inside a pellet-smoker firebox.
+CP_TI_F = 38  # Initial meat temp assumed at cook start (°F).
 LBS_PER_KG = 1.0 / 0.453592
 
 # Runtime stall-detection range (CONTEXT.md — distinct from projection range).
@@ -48,88 +52,235 @@ def _l_linear(intercept: float, slope: float = 0.0) -> Callable[[float], float]:
 # max_hours from CONTEXT.md absolute-max-cook-hours guardrails.
 CP_MEATS: dict[str, Meat] = {
     "beef_brisket_packer": Meat(
-        "beef_brisket_packer", "Beef Brisket — Whole Packer",
-        1.85, _l_linear(1.2, 0.05), 203, True, 90, True, 20.0,
+        "beef_brisket_packer",
+        "Beef Brisket — Whole Packer",
+        1.85,
+        _l_linear(1.2, 0.05),
+        203,
+        stall=True,
+        rest_min=90,
+        foil=True,
+        max_hours=20.0,
     ),
     "beef_brisket_flat": Meat(
-        "beef_brisket_flat", "Beef Brisket — Flat Only",
-        1.90, _l_linear(1.2, 0.05), 198, True, 30, True, 20.0,
+        "beef_brisket_flat",
+        "Beef Brisket — Flat Only",
+        1.90,
+        _l_linear(1.2, 0.05),
+        198,
+        stall=True,
+        rest_min=30,
+        foil=True,
+        max_hours=20.0,
     ),
     "pork_butt_pulled": Meat(
-        "pork_butt_pulled", "Pork Butt — Pulled Pork",
-        1.80, _l_linear(1.9), 203, True, 60, True, 16.0,
+        "pork_butt_pulled",
+        "Pork Butt — Pulled Pork",
+        1.80,
+        _l_linear(1.9),
+        203,
+        stall=True,
+        rest_min=60,
+        foil=True,
+        max_hours=16.0,
     ),
     "pork_butt_sliced": Meat(
-        "pork_butt_sliced", "Pork Butt — Sliced",
-        1.80, _l_linear(1.9), 190, True, 45, True, 16.0,
+        "pork_butt_sliced",
+        "Pork Butt — Sliced",
+        1.80,
+        _l_linear(1.9),
+        190,
+        stall=True,
+        rest_min=45,
+        foil=True,
+        max_hours=16.0,
     ),
     "beef_chuck_roast": Meat(
-        "beef_chuck_roast", "Beef Chuck Roast",
-        1.85, _l_linear(1.2, 0.05), 195, True, 45, True, 8.0,
+        "beef_chuck_roast",
+        "Beef Chuck Roast",
+        1.85,
+        _l_linear(1.2, 0.05),
+        195,
+        stall=True,
+        rest_min=45,
+        foil=True,
+        max_hours=8.0,
     ),
     "lamb_shoulder": Meat(
-        "lamb_shoulder", "Lamb Shoulder",
-        1.85, _l_linear(1.0, 0.07), 190, True, 45, True, 10.0,
+        "lamb_shoulder",
+        "Lamb Shoulder",
+        1.85,
+        _l_linear(1.0, 0.07),
+        190,
+        stall=True,
+        rest_min=45,
+        foil=True,
+        max_hours=10.0,
     ),
     "beef_ribs_dino": Meat(
-        "beef_ribs_dino", "Beef Ribs — Short Plate",
-        1.75, _l_linear(0.75), 203, True, 45, False, 10.0,
+        "beef_ribs_dino",
+        "Beef Ribs — Short Plate",
+        1.75,
+        _l_linear(0.75),
+        203,
+        stall=True,
+        rest_min=45,
+        foil=False,
+        max_hours=10.0,
     ),
     "whole_turkey": Meat(
-        "whole_turkey", "Whole Turkey",
-        1.55, _l_linear(1.5, 0.05), 165, False, 35, False, 8.0,
+        "whole_turkey",
+        "Whole Turkey",
+        1.55,
+        _l_linear(1.5, 0.05),
+        165,
+        stall=False,
+        rest_min=35,
+        foil=False,
+        max_hours=8.0,
     ),
     "turkey_breast": Meat(
-        "turkey_breast", "Turkey Breast",
-        1.60, _l_linear(1.0, 0.08), 160, False, 20, False, 8.0,
+        "turkey_breast",
+        "Turkey Breast",
+        1.60,
+        _l_linear(1.0, 0.08),
+        160,
+        stall=False,
+        rest_min=20,
+        foil=False,
+        max_hours=8.0,
     ),
     "whole_chicken": Meat(
-        "whole_chicken", "Whole Chicken",
-        1.55, _l_linear(1.0, 0.10), 165, False, 15, False, 4.0,
+        "whole_chicken",
+        "Whole Chicken",
+        1.55,
+        _l_linear(1.0, 0.10),
+        165,
+        stall=False,
+        rest_min=15,
+        foil=False,
+        max_hours=4.0,
     ),
     "chicken_thighs_legs": Meat(
-        "chicken_thighs_legs", "Chicken Thighs / Legs",
-        1.55, _l_linear(1.2), 175, False, 10, False, 4.0,
+        "chicken_thighs_legs",
+        "Chicken Thighs / Legs",
+        1.55,
+        _l_linear(1.2),
+        175,
+        stall=False,
+        rest_min=10,
+        foil=False,
+        max_hours=4.0,
     ),
     "chicken_breast": Meat(
-        "chicken_breast", "Chicken Breasts",
-        1.55, _l_linear(1.2), 162, False, 5, False, 4.0,
+        "chicken_breast",
+        "Chicken Breasts",
+        1.55,
+        _l_linear(1.2),
+        162,
+        stall=False,
+        rest_min=5,
+        foil=False,
+        max_hours=4.0,
     ),
     "pork_loin": Meat(
-        "pork_loin", "Pork Loin Roast",
-        1.60, _l_linear(1.0, 0.08), 145, False, 15, False, 4.0,
+        "pork_loin",
+        "Pork Loin Roast",
+        1.60,
+        _l_linear(1.0, 0.08),
+        145,
+        stall=False,
+        rest_min=15,
+        foil=False,
+        max_hours=4.0,
     ),
     "lamb_leg": Meat(
-        "lamb_leg", "Lamb Leg (Bone-In)",
-        1.60, _l_linear(1.0, 0.08), 135, False, 15, False, 10.0,
+        "lamb_leg",
+        "Lamb Leg (Bone-In)",
+        1.60,
+        _l_linear(1.0, 0.08),
+        135,
+        stall=False,
+        rest_min=15,
+        foil=False,
+        max_hours=10.0,
     ),
     "beef_tri_tip": Meat(
-        "beef_tri_tip", "Beef Tri-Tip Roast",
-        1.60, _l_linear(1.2), 135, False, 10, False, 8.0,
+        "beef_tri_tip",
+        "Beef Tri-Tip Roast",
+        1.60,
+        _l_linear(1.2),
+        135,
+        stall=False,
+        rest_min=10,
+        foil=False,
+        max_hours=8.0,
     ),
     "beef_prime_rib": Meat(
-        "beef_prime_rib", "Beef Prime Rib Roast",
-        1.60, _l_linear(1.2, 0.05), 130, False, 25, False, 8.0,
+        "beef_prime_rib",
+        "Beef Prime Rib Roast",
+        1.60,
+        _l_linear(1.2, 0.05),
+        130,
+        stall=False,
+        rest_min=25,
+        foil=False,
+        max_hours=8.0,
     ),
     "baby_back_ribs": Meat(
-        "baby_back_ribs", "Baby Back Ribs",
-        1.70, _l_linear(0.6), 190, False, 15, False, 10.0,
+        "baby_back_ribs",
+        "Baby Back Ribs",
+        1.70,
+        _l_linear(0.6),
+        190,
+        stall=False,
+        rest_min=15,
+        foil=False,
+        max_hours=10.0,
     ),
     "spare_ribs_stlouis": Meat(
-        "spare_ribs_stlouis", "Spare Ribs — St. Louis Style",
-        1.72, _l_linear(0.65), 195, False, 15, False, 10.0,
+        "spare_ribs_stlouis",
+        "Spare Ribs — St. Louis Style",
+        1.72,
+        _l_linear(0.65),
+        195,
+        stall=False,
+        rest_min=15,
+        foil=False,
+        max_hours=10.0,
     ),
     "pork_chops": Meat(
-        "pork_chops", "Pork Chops",
-        1.60, _l_linear(0.8), 145, False, 5, False, 4.0,
+        "pork_chops",
+        "Pork Chops",
+        1.60,
+        _l_linear(0.8),
+        145,
+        stall=False,
+        rest_min=5,
+        foil=False,
+        max_hours=4.0,
     ),
     "salmon_fillet": Meat(
-        "salmon_fillet", "Salmon Fillet",
-        1.50, _l_linear(0.3, 0.06), 145, False, 5, True, 2.0,
+        "salmon_fillet",
+        "Salmon Fillet",
+        1.50,
+        _l_linear(0.3, 0.06),
+        145,
+        stall=False,
+        rest_min=5,
+        foil=True,
+        max_hours=2.0,
     ),
     "sausage_brats": Meat(
-        "sausage_brats", "Sausage / Bratwurst",
-        1.55, _l_linear(0.7), 160, False, 5, False, 3.0,
+        "sausage_brats",
+        "Sausage / Bratwurst",
+        1.55,
+        _l_linear(0.7),
+        160,
+        stall=False,
+        rest_min=5,
+        foil=False,
+        max_hours=3.0,
     ),
 }
 
@@ -161,13 +312,15 @@ def wet_bulb_f(tdb_f: float, rh_pct: float) -> float:
         t_c * math.atan(0.151977 * (rh_pct + 8.313659) ** 0.5)
         + math.atan(t_c + rh_pct)
         - math.atan(rh_pct - 1.676331)
-        + 0.00391838 * (rh_pct ** 1.5) * math.atan(0.023101 * rh_pct)
+        + 0.00391838 * (rh_pct**1.5) * math.atan(0.023101 * rh_pct)
         - 4.686035
     )
     return tw_c * 9 / 5 + 32
 
 
-def phase_hours(km: float, l_in: float, t_drive_f: float, t_init_f: float, t_final_f: float) -> float:
+def phase_hours(
+    km: float, l_in: float, t_drive_f: float, t_init_f: float, t_final_f: float
+) -> float:
     """Single diffusion phase duration in hours. Returns inf for unreachable cases."""
     if t_drive_f <= t_final_f or not math.isfinite(t_drive_f):
         return math.inf
@@ -177,7 +330,7 @@ def phase_hours(km: float, l_in: float, t_drive_f: float, t_init_f: float, t_fin
     return km * l_in * l_in * math.log(ratio)
 
 
-def compute_at(meat_key: str, weight_lbs: float, pit_f: float) -> CookProjection | None:
+def compute_at(meat_key: str, weight_lbs: float, pit_f: float) -> CookProjection | None:  # noqa: C901, PLR0911
     """Compute the projected cook for a meat at a given pit temp.
 
     Returns None when the pit is too cool (wet-bulb >= pit) or numeric failure.

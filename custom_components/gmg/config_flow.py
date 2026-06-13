@@ -1,10 +1,11 @@
 """Config flow for the Green Mountain Grills integration."""
+
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
@@ -12,7 +13,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -49,7 +49,10 @@ from .const import (
     MIN_GRILL_TEMP_F,
     MIN_SCAN_INTERVAL,
 )
+
 if TYPE_CHECKING:
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
     from .coordinator import GMGConfigEntry
 
 
@@ -64,16 +67,13 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovered: dict[str, str] = {}
 
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> ConfigFlowResult:
         """Handle the initial step."""
-        return self.async_show_menu(
-            step_id="user", menu_options=["scan", "manual"]
-        )
+        return self.async_show_menu(step_id="user", menu_options=["scan", "manual"])
 
-    async def async_step_scan(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_scan(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle LAN discovery."""
         configured = self._async_current_ids()
         discovered = await async_discover(timeout=3.0)
@@ -117,9 +117,7 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
             }
         )
 
-    async def async_step_manual(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_manual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle manual host entry."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -146,9 +144,7 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_dhcp(
-        self, discovery_info: DhcpServiceInfo
-    ) -> ConfigFlowResult:
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo) -> ConfigFlowResult:
         """Handle DHCP discovery."""
         host = discovery_info.ip
         client = GMGClient(host=host)
@@ -266,9 +262,7 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
         else:
             await self._safe_close(client)
             await self.async_set_unique_id(info.serial)
-            self._abort_if_unique_id_configured(
-                updates={CONF_HOST: host, CONF_PORT: port}
-            )
+            self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_PORT: port})
             return (
                 self.async_create_entry(
                     title=f"GMG {info.serial}",
@@ -280,9 +274,7 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
         await self._safe_close(client)
         return None, errors
 
-    async def _async_probe_and_create(
-        self, host: str, port: int
-    ) -> ConfigFlowResult | None:
+    async def _async_probe_and_create(self, host: str, port: int) -> ConfigFlowResult | None:
         """Probe and create or return ``None`` if it failed."""
         result, _errors = await self._async_probe_or_errors(host, port)
         return result
@@ -290,15 +282,13 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     async def _safe_close(client: GMGClient) -> None:
         """Close a client, ignoring close-time errors."""
-        try:
+        with contextlib.suppress(Exception):
             await client.async_close()
-        except Exception:  # noqa: BLE001
-            pass
 
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: GMGConfigEntry,
+        config_entry: GMGConfigEntry,  # noqa: ARG004
     ) -> GMGOptionsFlow:
         """Return the options flow handler."""
         return GMGOptionsFlow()
@@ -307,18 +297,14 @@ class GMGConfigFlow(ConfigFlow, domain=DOMAIN):
 class GMGOptionsFlow(OptionsFlowWithReload):
     """Handle the options flow for Green Mountain Grills."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
-                ): NumberSelector(
+                vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): NumberSelector(
                     NumberSelectorConfig(
                         min=MIN_SCAN_INTERVAL,
                         max=MAX_SCAN_INTERVAL,
@@ -346,7 +332,5 @@ class GMGOptionsFlow(OptionsFlowWithReload):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, self.config_entry.options
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, self.config_entry.options),
         )

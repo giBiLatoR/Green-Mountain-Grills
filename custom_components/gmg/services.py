@@ -4,10 +4,12 @@ Register these from custom_components.gmg.__init__.async_setup() by calling
 ``async_setup_services(hass)``. ``async_unload_services(hass)`` is provided for
 symmetry but is not normally required since HA tears services down on reload.
 """
+
 from __future__ import annotations
 
-import voluptuous as vol
+from typing import TYPE_CHECKING
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, callback
@@ -28,7 +30,9 @@ from .const import (
 )
 from .cook_manager import CookManagerError, CookMode
 from .cook_physics import CP_MEATS
-from .coordinator import GMGConfigEntry, GMGCoordinator
+
+if TYPE_CHECKING:
+    from .coordinator import GMGConfigEntry, GMGCoordinator
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_PROBE = "probe"
@@ -77,14 +81,10 @@ _START_COOK_SCHEMA = vol.Schema(
     }
 )
 
-_ABORT_COOK_SCHEMA = vol.Schema(
-    {vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string}
-)
+_ABORT_COOK_SCHEMA = vol.Schema({vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string})
 
 
-def _resolve_coordinator(
-    hass: HomeAssistant, entry_id: str
-) -> GMGCoordinator:
+def _resolve_coordinator(hass: HomeAssistant, entry_id: str) -> GMGCoordinator:
     """Resolve a loaded GMG coordinator by config entry id."""
     entry: GMGConfigEntry | None = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain != DOMAIN:
@@ -103,7 +103,7 @@ def _resolve_coordinator(
 
 
 @callback
-def async_setup_services(hass: HomeAssistant) -> None:
+def async_setup_services(hass: HomeAssistant) -> None:  # noqa: C901
     """Register the GMG domain services."""
 
     async def _async_set_probe_target(call: ServiceCall) -> None:
@@ -122,7 +122,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
             ) from err
         except HomeAssistantError:
             raise
-        except Exception as err:  # noqa: BLE001 - defensive service boundary
+        except Exception as err:
             LOGGER.exception("set_probe_target service failed")
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -184,9 +184,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
 
 
-async def async_start_cook_from_helpers(
-    hass: HomeAssistant, coordinator: GMGCoordinator
-) -> None:
+async def async_start_cook_from_helpers(hass: HomeAssistant, coordinator: GMGCoordinator) -> None:
     """Resolve helper-entity values for this grill and start a cook.
 
     Used by the button.start_cook entity. Pulls meat/mode/probe from the
@@ -210,9 +208,7 @@ async def async_start_cook_from_helpers(
         values[slot] = st.state if st is not None else None
     missing = [k for k, v in values.items() if v in (None, "unknown", "unavailable")]
     if missing:
-        raise ServiceValidationError(
-            f"missing auto-cook helper values: {', '.join(missing)}"
-        )
+        raise ServiceValidationError(f"missing auto-cook helper values: {', '.join(missing)}")
     if coordinator.data is None:
         raise ServiceValidationError("no snapshot available yet")
     try:

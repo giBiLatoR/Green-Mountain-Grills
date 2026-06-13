@@ -1,4 +1,5 @@
 """Tests for the GMG config, options and reconfigure flows."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -6,7 +7,6 @@ from typing import TYPE_CHECKING
 import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.gmg.api import (
     GMGConnectionError,
@@ -16,6 +16,7 @@ from custom_components.gmg.const import DOMAIN
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 async def _start_user_flow(hass: HomeAssistant) -> dict:
@@ -24,9 +25,8 @@ async def _start_user_flow(hass: HomeAssistant) -> dict:
     )
 
 
-async def test_user_flow_menu_then_manual_success(
-    hass: HomeAssistant, mock_client
-) -> None:
+@pytest.mark.usefixtures("mock_client")
+async def test_user_flow_menu_then_manual_success(hass: HomeAssistant) -> None:
     """Walk: user menu -> manual -> happy path -> entry created."""
     result = await _start_user_flow(hass)
 
@@ -81,8 +81,10 @@ async def test_user_flow_server_mode(hass: HomeAssistant, mock_client) -> None:
     assert result["reason"] == "server_mode_enabled"
 
 
+@pytest.mark.usefixtures("mock_client")
 async def test_user_flow_already_configured(
-    hass: HomeAssistant, mock_client, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """If an entry with the same unique_id exists, abort."""
     mock_config_entry.add_to_hass(hass)
@@ -100,7 +102,8 @@ async def test_user_flow_already_configured(
     assert result["reason"] == "already_configured"
 
 
-async def test_dhcp_discovery_creates_entry(hass: HomeAssistant, mock_client) -> None:
+@pytest.mark.usefixtures("mock_client")
+async def test_dhcp_discovery_creates_entry(hass: HomeAssistant) -> None:
     """A DHCP discovery should walk through confirm and create an entry."""
     discovery = DhcpServiceInfo(
         ip="192.0.2.10",
@@ -119,8 +122,10 @@ async def test_dhcp_discovery_creates_entry(hass: HomeAssistant, mock_client) ->
     assert result["data"]["host"] == "192.0.2.10"
 
 
+@pytest.mark.usefixtures("mock_client")
 async def test_dhcp_discovery_updates_existing(
-    hass: HomeAssistant, mock_client, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """DHCP that matches an existing serial should update its host."""
     mock_config_entry.add_to_hass(hass)
@@ -138,8 +143,10 @@ async def test_dhcp_discovery_updates_existing(
     assert mock_config_entry.data["host"] == "192.0.2.55"
 
 
+@pytest.mark.usefixtures("mock_client")
 async def test_reconfigure_flow_success(
-    hass: HomeAssistant, mock_client, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """Reconfigure flow should update the host on the existing entry."""
     mock_config_entry.add_to_hass(hass)
@@ -156,8 +163,10 @@ async def test_reconfigure_flow_success(
     assert mock_config_entry.data["host"] == "192.0.2.99"
 
 
+@pytest.mark.usefixtures("mock_client")
 async def test_options_flow_sets_scan_interval(
-    hass: HomeAssistant, mock_client, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
     """Options flow should accept and persist a new scan interval."""
     mock_config_entry.add_to_hass(hass)
@@ -176,9 +185,8 @@ async def test_options_flow_sets_scan_interval(
 @pytest.fixture(autouse=True)
 def _silence_async_setup(monkeypatch: pytest.MonkeyPatch) -> None:
     """Avoid running the full platform setup chain during flow tests."""
+
     async def _ok(*_args: object, **_kwargs: object) -> bool:
         return True
 
-    monkeypatch.setattr(
-        "custom_components.gmg.async_setup_entry", _ok, raising=False
-    )
+    monkeypatch.setattr("custom_components.gmg.async_setup_entry", _ok, raising=False)
