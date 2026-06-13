@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![HA min version](https://img.shields.io/badge/Home%20Assistant-2026.1%2B-41BDF5.svg)](https://www.home-assistant.io/)
 
-> ## ⚠️ WARNING — EXPERIMENTAL & CURRENTLY UNTESTED
+> ## ⚠️ WARNING — HIGHLY EXPERIMENTAL
 >
 > **This fork is experimental and under active development.** The Auto Cook feature automatically controls your pellet grill's temperature based on sensor readings. While safety guardrails are in place (maximum pit temperature clamp, rate-limited adjustments), this software can make real-world changes to a device involving live fire and high heat.
 >
