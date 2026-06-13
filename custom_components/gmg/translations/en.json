@@ -238,7 +238,30 @@
     },
     "select": {
       "cook_meat_type": {
-        "name": "Cook meat type"
+        "name": "Cook meat type",
+        "state": {
+          "beef_brisket_packer": "Beef Brisket — Whole Packer",
+          "beef_brisket_flat": "Beef Brisket — Flat Only",
+          "pork_butt_pulled": "Pork Butt — Pulled Pork",
+          "pork_butt_sliced": "Pork Butt — Sliced",
+          "beef_chuck_roast": "Beef Chuck Roast",
+          "lamb_shoulder": "Lamb Shoulder",
+          "beef_ribs_dino": "Beef Ribs — Short Plate (Dino)",
+          "whole_turkey": "Whole Turkey",
+          "turkey_breast": "Turkey Breast",
+          "whole_chicken": "Whole Chicken",
+          "chicken_thighs_legs": "Chicken Thighs / Legs",
+          "chicken_breast": "Chicken Breasts",
+          "pork_loin": "Pork Loin Roast",
+          "lamb_leg": "Lamb Leg (Bone-In)",
+          "beef_tri_tip": "Beef Tri-Tip Roast",
+          "beef_prime_rib": "Beef Prime Rib Roast",
+          "baby_back_ribs": "Baby Back Ribs",
+          "spare_ribs_stlouis": "Spare Ribs — St. Louis Style",
+          "pork_chops": "Pork Chops",
+          "salmon_fillet": "Salmon Fillet",
+          "sausage_brats": "Sausage / Bratwurst"
+        }
       },
       "cook_mode": {
         "name": "Cook mode",
@@ -249,7 +272,11 @@
         }
       },
       "cook_probe": {
-        "name": "Cook probe"
+        "name": "Cook probe",
+        "state": {
+          "1": "Probe 1",
+          "2": "Probe 2"
+        }
       }
     }
   },
