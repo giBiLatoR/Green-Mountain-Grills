@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" fill="none">
+  <!-- Generic pellet-smoker silhouette. Neutral so it reads on any theme.
+       Drop a per-model transparent PNG into static/models/ and map it in
+       gmg-smoker-strategy.js (MODEL_IMAGES) to replace this. -->
+  <g stroke="#9aa0a6" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <!-- legs -->
+    <line x1="120" y1="172" x2="104" y2="226"/>
+    <line x1="250" y1="172" x2="266" y2="226"/>
+    <!-- barrel body -->
+    <rect x="96" y="92" width="190" height="84" rx="14" fill="#3a3f44"/>
+    <!-- lid -->
+    <path d="M96 110 Q191 56 286 110" fill="#2b2f33"/>
+    <!-- lid handle -->
+    <line x1="178" y1="78" x2="204" y2="78"/>
+    <!-- chimney -->
+    <rect x="296" y="58" width="20" height="48" rx="4" fill="#2b2f33"/>
+    <!-- hopper (pellet box, left) -->
+    <path d="M40 118 h56 v58 h-56 l-12 -16 v-26 z" fill="#2b2f33"/>
+    <!-- control dial -->
+    <circle cx="62" cy="150" r="9" fill="#9aa0a6"/>
+    <!-- grate line -->
+    <line x1="110" y1="150" x2="272" y2="150" stroke-width="2" stroke-dasharray="4 6"/>
+  </g>
+</svg>

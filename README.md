@@ -274,6 +274,52 @@ automation:
           temperature: 225
 ```
 
+## Prebuilt dashboard (auto-strategy)
+
+The integration ships a **Lovelace auto-strategy** that builds a full smoker
+view for you — a picture-overlay of the grill, the auto-cook controls, and a
+progress graph — with **no entity IDs to wire up**. It finds your GMG device
+automatically and resolves every entity by its registry key, so it keeps
+working even if you rename things, and it shows temperatures in *your* unit
+system (°C or °F) without any conversion hacks.
+
+**Add it as a view.** Edit a dashboard → ⋮ → *Edit in YAML* (or add a new view
+in YAML mode) and use:
+
+```yaml
+strategy:
+  type: custom:gmg-smoker
+  # serial: GMG12137138   # optional — only needed if you have >1 grill
+  # show_graph: false     # optional — set false if you don't run apexcharts-card
+```
+
+Or make a whole dashboard out of it (Settings → Dashboards → Add → *Take
+control* is not needed; in YAML):
+
+```yaml
+strategy:
+  type: custom:gmg-smoker
+```
+
+**How it loads.** The integration serves its assets at `/gmg_static/` and
+registers the strategy automatically on startup — no manual “Resources” entry.
+A one-time **restart** is needed after first install so the new frontend asset
+is registered.
+
+**Optional HACS cards** for the full look (the view still renders without them):
+- [`card-mod`](https://github.com/thomasloven/lovelace-card-mod) — the heating glow
+- [`apexcharts-card`](https://github.com/RomRider/apexcharts-card) — the
+  *Cook Progress vs Plan* graph (omit it with `show_graph: false`)
+
+**Overlay images.** A neutral smoker silhouette ships as the default. To use a
+real picture of your model, drop a transparent PNG into
+`custom_components/gmg/static/models/` and map your `model_id` to it in the
+`MODEL_IMAGES` table at the top of `static/gmg-smoker-strategy.js`.
+
+> This strategy is **experimental**. It does not depend on any personal helper
+> entities — contrast with the hand-built popup below, which uses extra HACS
+> cards and a couple of custom `input_boolean` / template-sensor helpers.
+
 ## Dashboard & phone popup
 
 The companion dashboards drive everything from a single **`#smoker` popup**
