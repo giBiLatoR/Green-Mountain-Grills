@@ -36,7 +36,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     static_dir = Path(__file__).parent / "static"
     try:
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(STATIC_URL_PATH, str(static_dir), False)]
+            [StaticPathConfig(STATIC_URL_PATH, str(static_dir), cache_headers=False)]
         )
         add_extra_js_url(hass, f"{STATIC_URL_PATH}/gmg-smoker-strategy.js")
     except Exception:  # noqa: BLE001 — never block setup on a dashboard extra

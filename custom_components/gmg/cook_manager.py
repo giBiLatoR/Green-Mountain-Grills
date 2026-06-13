@@ -22,8 +22,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import persistent_notification
 
 from .api import GMGSnapshot, PowerState
 from .const import LOGGER
