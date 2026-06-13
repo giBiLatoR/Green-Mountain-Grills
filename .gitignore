@@ -75,6 +75,8 @@ secrets.yaml
 *.local.yaml
 .pi/
 HANDOFF.md
+# Local agent working instructions (not published)
+CLAUDE.md
 
 # Per-model overlay images are user-supplied. Do not commit product photos
 # (GMG marketing images are copyrighted); ship only the mechanism + generic art.
