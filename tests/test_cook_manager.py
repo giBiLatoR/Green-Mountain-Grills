@@ -7,10 +7,11 @@ in HA integration tests separately. Here we only verify the synchronous parts.
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from custom_components.gmg.api import PowerState
 from custom_components.gmg.cook_manager import (
     PIT_CLAMP_MAX_F,
     PIT_CLAMP_MIN_F,
@@ -21,6 +22,7 @@ from custom_components.gmg.cook_manager import (
     CookState,
     _ProbeSample,
 )
+from custom_components.gmg.units import TEMP_C
 
 
 @pytest.fixture
@@ -92,3 +94,91 @@ async def test_probe_drop_during_preheat_starts_cook(
 
     assert manager.session.state is CookState.COOKING
     assert manager.session.cook_started_at is not None
+
+
+def _preheating_session(manager: CookManager, mode: CookMode) -> CookSession:
+    """Build a PREHEATING session for control-loop tests."""
+    pf = manager.pre_flight(meat_key="whole_chicken", weight_kg=2.0, finish_in_hours=3.0)
+    return CookSession(
+        state=CookState.PREHEATING,
+        meat_key="whole_chicken",
+        weight_kg=2.0,
+        probe_index=1,
+        mode=mode,
+        pit_target_f=pf.pit_target_f,
+        projection=pf.projection,
+        created_at=time.time(),
+    )
+
+
+async def test_coach_mode_makes_no_grill_writes_on_start(
+    manager: CookManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Coach start neither powers on nor sets the pit; it only advises."""
+    manager.configure(auto_cook=True, dev_mode=False, push=False, temp_unit=TEMP_C)
+    monkeypatch.setattr(manager, "_notify", lambda **_kwargs: None)
+    manager.hass.async_add_executor_job = AsyncMock()
+    manager.coordinator.async_power_on = AsyncMock()
+    manager.coordinator.async_set_grill_temp = AsyncMock()
+
+    snapshot = MagicMock()
+    snapshot.power_state = PowerState.OFF
+    snapshot.grill_set_temp = 180
+
+    session = await manager.start_cook(
+        meat_key="whole_chicken",
+        weight_kg=2.0,
+        probe_index=1,
+        mode=CookMode.COACH,
+        finish_in_hours=3.0,
+        snapshot=snapshot,
+    )
+
+    manager.coordinator.async_power_on.assert_not_called()
+    manager.coordinator.async_set_grill_temp.assert_not_called()
+    assert session.state is CookState.PREHEATING
+
+
+async def test_set_and_forget_does_not_adjust_pit(
+    manager: CookManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Set-and-forget never adjusts the pit during cooking."""
+    manager.configure(auto_cook=True, dev_mode=False, push=False)
+    monkeypatch.setattr(manager, "_notify", lambda **_kwargs: None)
+    manager.coordinator.async_set_grill_temp = AsyncMock()
+
+    session = _preheating_session(manager, CookMode.SET_AND_FORGET)
+    now = time.time()
+    session.state = CookState.COOKING
+    session.cook_started_at = now - 3600  # an hour in, behind schedule
+    manager.session = session
+
+    snapshot = MagicMock()
+    snapshot.power_state = PowerState.ON
+    snapshot.grill_temp = 225
+    snapshot.grill_set_temp = 225
+    snapshot.probe_1_temp = 80.0  # far behind expected
+    snapshot.probe_2_temp = None
+
+    await manager.update(snapshot)
+
+    manager.coordinator.async_set_grill_temp.assert_not_called()
+
+
+def test_mark_meat_on_starts_cook(manager: CookManager, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The meat-on override jumps a preheating session straight to COOKING."""
+    monkeypatch.setattr(manager, "_notify", lambda **_kwargs: None)
+    manager.session = _preheating_session(manager, CookMode.COACH)
+
+    manager.mark_meat_on()
+
+    assert manager.session.state is CookState.COOKING
+    assert manager.session.cook_started_at is not None
+
+
+def test_notifications_format_in_celsius(manager: CookManager) -> None:
+    """_ftemp honors the configured temperature unit."""
+    manager.configure(auto_cook=True, dev_mode=False, push=False, temp_unit=TEMP_C)
+    assert manager._ftemp(212) == "100°C"
+    manager.configure(auto_cook=True, dev_mode=False, push=False)  # default F
+    assert manager._ftemp(212) == "212°F"

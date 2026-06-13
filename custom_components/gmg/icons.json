@@ -100,6 +100,15 @@
       },
       "cold_smoke": {
         "default": "mdi:smoke"
+      },
+      "start_cook": {
+        "default": "mdi:play-circle"
+      },
+      "abort_cook": {
+        "default": "mdi:stop-circle"
+      },
+      "meat_on": {
+        "default": "mdi:food-steak"
       }
     }
   },

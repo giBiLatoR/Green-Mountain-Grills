@@ -30,6 +30,7 @@ from .const import (
 )
 from .cook_manager import CookManagerError, CookMode
 from .cook_physics import CP_MEATS
+from .units import WEIGHT_LB, lb_to_kg
 
 if TYPE_CHECKING:
     from .coordinator import GMGConfigEntry, GMGCoordinator
@@ -211,10 +212,13 @@ async def async_start_cook_from_helpers(hass: HomeAssistant, coordinator: GMGCoo
         raise ServiceValidationError(f"missing auto-cook helper values: {', '.join(missing)}")
     if coordinator.data is None:
         raise ServiceValidationError("no snapshot available yet")
+    # The cook-weight helper is in the user's display unit; normalize to kg.
+    raw_weight = float(values["cook_weight_kg"])
+    weight_kg = lb_to_kg(raw_weight) if coordinator.weight_unit == WEIGHT_LB else raw_weight
     try:
         await coordinator.cook_manager.start_cook(
             meat_key=values["cook_meat_type"],
-            weight_kg=float(values["cook_weight_kg"]),
+            weight_kg=weight_kg,
             probe_index=int(values["cook_probe"]),
             mode=CookMode(values["cook_mode"]),
             finish_in_hours=float(values["cook_finish_in_hours"]),

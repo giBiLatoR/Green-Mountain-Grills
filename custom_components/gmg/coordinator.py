@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfTemperature
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
@@ -32,14 +33,24 @@ from .const import (
     CONF_AUTO_COOK_PUSH,
     CONF_MAX_GRILL_TEMP_F,
     CONF_SCAN_INTERVAL,
+    CONF_TEMPERATURE_UNIT,
+    CONF_WEIGHT_UNIT,
     DEFAULT_MAX_GRILL_TEMP_F,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_TEMPERATURE_UNIT,
+    DEFAULT_WEIGHT_UNIT,
     DOMAIN,
     LOGGER,
     MAX_GRILL_TEMP_F,
     MIN_GRILL_TEMP_F,
 )
 from .cook_manager import CookManager
+from .units import (
+    TEMP_C,
+    WEIGHT_KG,
+    resolve_temp_unit,
+    resolve_weight_unit,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -76,6 +87,11 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
             always_update=False,
         )
         self.max_grill_temp_f = DEFAULT_MAX_GRILL_TEMP_F
+        # Resolved display units ("C"/"F", "kg"/"lb"). Concrete; never "auto".
+        self.temperature_unit = TEMP_C
+        self.weight_unit = WEIGHT_KG
+        # Raw preference incl. "auto" — drives the entity-registry override.
+        self.temperature_unit_pref = DEFAULT_TEMPERATURE_UNIT
         self.cook_manager = CookManager(hass, self)
         self._refresh_cook_options(entry)
 
@@ -84,11 +100,22 @@ class GMGCoordinator(DataUpdateCoordinator[GMGSnapshot]):
         raw_max = entry.options.get(CONF_MAX_GRILL_TEMP_F, DEFAULT_MAX_GRILL_TEMP_F)
         # Bound to the hardware-safe window regardless of what is stored.
         self.max_grill_temp_f = int(max(MIN_GRILL_TEMP_F, min(MAX_GRILL_TEMP_F, raw_max)))
+        # Resolve unit preferences; "auto" follows the HA unit system.
+        metric = self.hass.config.units.temperature_unit == UnitOfTemperature.CELSIUS
+        self.temperature_unit_pref = entry.options.get(
+            CONF_TEMPERATURE_UNIT, DEFAULT_TEMPERATURE_UNIT
+        )
+        self.temperature_unit = resolve_temp_unit(self.temperature_unit_pref, metric=metric)
+        self.weight_unit = resolve_weight_unit(
+            entry.options.get(CONF_WEIGHT_UNIT, DEFAULT_WEIGHT_UNIT), metric=metric
+        )
         self.cook_manager.configure(
             auto_cook=bool(entry.options.get(CONF_AUTO_COOK_ENABLED, False)),
             dev_mode=bool(entry.options.get(CONF_AUTO_COOK_DEV_MODE, False)),
             push=bool(entry.options.get(CONF_AUTO_COOK_PUSH, False)),
             max_pit_f=self.max_grill_temp_f,
+            temp_unit=self.temperature_unit,
+            weight_unit=self.weight_unit,
         )
 
     async def _async_setup(self) -> None:

@@ -268,6 +268,9 @@ function buildControls(e) {
     e.cookState && { type: "section", label: "Cook In Progress" },
     e.cookState && cond(active, { entity: e.cookState, name: "Phase", icon: "mdi:chef-hat" }),
     e.cookMeat && cond(active, { entity: e.cookMeat, name: "Meat", icon: "mdi:food-steak" }),
+    // Meat-on override: probe already in cold meat (no drop event to detect).
+    e.meatOn &&
+      cond(active, { entity: e.meatOn, name: "✔  Meat is on (start tracking)", icon: "mdi:food-steak" }),
     e.onSchedule &&
       cond(active, { entity: e.onSchedule, name: "On schedule", icon: "mdi:check-decagram" }),
     e.remaining &&
@@ -345,6 +348,7 @@ async function buildView(hass, config) {
     probe2Target: byKey(ents, "number", "probe_2_target"),
     startCook: byKey(ents, "button", "start_cook"),
     abortCook: byKey(ents, "button", "abort_cook"),
+    meatOn: byKey(ents, "button", "meat_on"),
     coldSmoke: byKey(ents, "button", "cold_smoke"),
   };
 

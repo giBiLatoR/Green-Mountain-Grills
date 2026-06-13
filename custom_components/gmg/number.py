@@ -18,18 +18,22 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     COOK_WEIGHT_STEP_KG,
+    COOK_WEIGHT_STEP_LB,
     GRILL_TEMP_STEP_F,
     LOGGER,
     MAX_COOK_WEIGHT_KG,
+    MAX_COOK_WEIGHT_LB,
     MAX_FINISH_IN_HOURS,
     MAX_GRILL_TEMP_F,
     MAX_PROBE_TARGET_F,
     MIN_COOK_WEIGHT_KG,
+    MIN_COOK_WEIGHT_LB,
     MIN_FINISH_IN_HOURS,
     MIN_GRILL_TEMP_F,
     MIN_PROBE_TARGET_F,
 )
 from .entity import GMGBaseEntity
+from .units import WEIGHT_LB, kg_to_lb
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -97,18 +101,31 @@ async def async_setup_entry(
 ) -> None:
     """Set up GMG number entities from a config entry."""
     coordinator = entry.runtime_data
+    # The cook-weight helper takes its unit + bounds from the weight toggle.
+    if coordinator.weight_unit == WEIGHT_LB:
+        weight = GMGCookInputNumber(
+            coordinator,
+            key="cook_weight_kg",
+            unit=UnitOfMass.POUNDS,
+            min_v=MIN_COOK_WEIGHT_LB,
+            max_v=MAX_COOK_WEIGHT_LB,
+            step=COOK_WEIGHT_STEP_LB,
+            default=round(kg_to_lb(1.0), 1),
+        )
+    else:
+        weight = GMGCookInputNumber(
+            coordinator,
+            key="cook_weight_kg",
+            unit=UnitOfMass.KILOGRAMS,
+            min_v=MIN_COOK_WEIGHT_KG,
+            max_v=MAX_COOK_WEIGHT_KG,
+            step=COOK_WEIGHT_STEP_KG,
+            default=1.0,
+        )
     async_add_entities(
         [
             *(GMGNumber(coordinator, d) for d in NUMBERS),
-            GMGCookInputNumber(
-                coordinator,
-                key="cook_weight_kg",
-                unit=UnitOfMass.KILOGRAMS,
-                min_v=MIN_COOK_WEIGHT_KG,
-                max_v=MAX_COOK_WEIGHT_KG,
-                step=COOK_WEIGHT_STEP_KG,
-                default=1.0,
-            ),
+            weight,
             GMGCookInputNumber(
                 coordinator,
                 key="cook_finish_in_hours",

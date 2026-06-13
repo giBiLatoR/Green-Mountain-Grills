@@ -94,6 +94,57 @@ _Avoid_: Debug mode, logging mode — dev mode implies intentional data collecti
 - Asymmetric bias: adjust UP when behind schedule, but don't aggressively adjust DOWN when ahead (only reduce back to original calculated target).
 - During stall phase: wider tolerance, minimal pit adjustments (evaporative cooling dominates regardless of setpoint).
 
+## Cook Modes
+
+`cook_mode` (select entity / `mode` service arg) selects how much control the
+system takes. All three share the same state machine, projection curve, and
+milestone notifications (grill-ready, approaching, pull-reached); they differ
+only in whether the integration **writes to the grill**.
+
+| Mode | Auto power-on | Sets pit at start | Ongoing pit adjustment | Off-schedule behavior |
+|------|---------------|-------------------|------------------------|-----------------------|
+| **autonomous** (default) | Yes | Yes | Yes — rate-limited proportional control | Adjusts the pit setpoint |
+| **set_and_forget** | Yes | Yes | **No** | Leaves the grill alone after preheat |
+| **coach** | **No** | **No** | **No** | Notifies the user to nudge the pit manually |
+
+- **autonomous** is the full closed-loop controller (the original behavior).
+- **set_and_forget** preheats and sets the calculated pit once, then only tracks
+  and notifies — no further setpoint writes.
+- **coach** never touches the grill at all. At start it tells the user what pit
+  to dial in; during the cook, when the probe drifts more than
+  `COACH_ADVISE_BAND_F` (8°F) from the projection it advises raising/lowering the
+  pit, at most once every `COACH_ADVISE_INTERVAL_S` (15 min).
+
+The hard guardrails (never auto-power-off, pit clamp, asymmetric bias) apply to
+the modes that write; coach simply never writes.
+
+## Meat-On Override
+
+Cook Start Detection relies on a probe **drop** as the probe moves from hot
+chamber air into cold meat. If the probe is already buried in cold meat before
+the cook starts, no drop ever occurs. The **Meat is on** button
+(`button.…_meat_on` → `CookManager.mark_meat_on`) is the manual override: pressed
+during PLANNED / PREHEATING / WAITING_MEAT it forces the transition to COOKING
+and stamps `cook_started_at` now.
+
+## Display Units
+
+Two options-flow preferences control how temperatures and weights are shown.
+Both default to **auto** (follow the Home Assistant unit system).
+
+- **temperature_unit** (`auto` / `celsius` / `fahrenheit`): the grill protocol is
+  natively °F. When set to °C or °F, the integration forces that display unit on
+  every GMG temperature entity (grill, probes, setpoints, cook-plan sensors) via
+  the entity-registry unit override, and formats all notifications in that unit.
+  `auto` clears the override so the entities follow the HA unit system. (The
+  `climate` thermostat card always follows HA's global unit system — HA has no
+  per-entity climate unit override; the sensor/number temperatures honor the
+  toggle.)
+- **weight_unit** (`auto` / `kilograms` / `pounds`): switches the cook-weight
+  number entity's unit, bounds, and step, and the weight shown in notifications.
+  Weight is always stored and computed canonically in kilograms; the
+  `start_cook` helper normalizes the displayed value back to kg.
+
 ## State Machine
 
 ```

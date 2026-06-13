@@ -38,9 +38,13 @@ from .const import (
     CONF_AUTO_COOK_PUSH,
     CONF_MAX_GRILL_TEMP_F,
     CONF_SCAN_INTERVAL,
+    CONF_TEMPERATURE_UNIT,
+    CONF_WEIGHT_UNIT,
     DEFAULT_MAX_GRILL_TEMP_F,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_TEMPERATURE_UNIT,
+    DEFAULT_WEIGHT_UNIT,
     DOMAIN,
     GRILL_TEMP_STEP_F,
     LOGGER,
@@ -48,6 +52,14 @@ from .const import (
     MAX_SCAN_INTERVAL,
     MIN_GRILL_TEMP_F,
     MIN_SCAN_INTERVAL,
+)
+from .units import (
+    TEMP_UNIT_AUTO,
+    TEMP_UNIT_CELSIUS,
+    TEMP_UNIT_FAHRENHEIT,
+    WEIGHT_UNIT_AUTO,
+    WEIGHT_UNIT_KILOGRAMS,
+    WEIGHT_UNIT_POUNDS,
 )
 
 if TYPE_CHECKING:
@@ -322,6 +334,28 @@ class GMGOptionsFlow(OptionsFlowWithReload):
                         step=GRILL_TEMP_STEP_F,
                         unit_of_measurement="°F",
                         mode="slider",
+                    )
+                ),
+                vol.Optional(
+                    CONF_TEMPERATURE_UNIT, default=DEFAULT_TEMPERATURE_UNIT
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            {"value": TEMP_UNIT_AUTO, "label": "Follow Home Assistant"},
+                            {"value": TEMP_UNIT_CELSIUS, "label": "Celsius (°C)"},
+                            {"value": TEMP_UNIT_FAHRENHEIT, "label": "Fahrenheit (°F)"},
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_WEIGHT_UNIT, default=DEFAULT_WEIGHT_UNIT): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            {"value": WEIGHT_UNIT_AUTO, "label": "Follow Home Assistant"},
+                            {"value": WEIGHT_UNIT_KILOGRAMS, "label": "Kilograms (kg)"},
+                            {"value": WEIGHT_UNIT_POUNDS, "label": "Pounds (lb)"},
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
                 vol.Optional(CONF_AUTO_COOK_ENABLED, default=False): bool,

@@ -40,6 +40,10 @@ async def _abort_cook(coordinator: GMGCoordinator) -> None:
     await coordinator.cook_manager.abort_cook()
 
 
+async def _meat_on(coordinator: GMGCoordinator) -> None:
+    coordinator.cook_manager.mark_meat_on()
+
+
 BUTTONS: tuple[GMGButtonDescription, ...] = (
     GMGButtonDescription(
         key="power_on",
@@ -65,6 +69,11 @@ BUTTONS: tuple[GMGButtonDescription, ...] = (
         key="abort_cook",
         translation_key="abort_cook",
         press_fn=_abort_cook,
+    ),
+    GMGButtonDescription(
+        key="meat_on",
+        translation_key="meat_on",
+        press_fn=_meat_on,
     ),
 )
 

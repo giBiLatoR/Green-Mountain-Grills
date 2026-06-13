@@ -36,6 +36,7 @@ from .cook_physics import (
     find_exact_temp,
     phase_at,
 )
+from .units import TEMP_F, WEIGHT_KG, fmt_temp, fmt_weight
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -56,6 +57,8 @@ ADJ_INTERVAL_SPAN_S = 120
 PIT_ERROR_TRIP_F = 200  # Was above this, dropped below 150 → fail.
 PROBE_UNPLUGGED_SENTINEL_F = 89  # Probe pulled from meat.
 DB_FILENAME = "gmg_cooks.db"
+COACH_ADVISE_BAND_F = 8  # Coach mode advises when off-schedule by this much.
+COACH_ADVISE_INTERVAL_S = 900  # …at most once every 15 min.
 
 
 class CookState(StrEnum):
@@ -141,6 +144,9 @@ class CookManager:
         self._push_enabled = False
         # Upper pit clamp; overridden from options. Never exceeds PIT_CLAMP_MAX_F.
         self._max_pit_f = PIT_CLAMP_MAX_F
+        # Resolved display units for notifications ("C"/"F", "kg"/"lb").
+        self._temp_unit = TEMP_F
+        self._weight_unit = WEIGHT_KG
 
     # --- lifecycle ----------------------------------------------------------
 
@@ -151,6 +157,8 @@ class CookManager:
         dev_mode: bool,
         push: bool,
         max_pit_f: int = PIT_CLAMP_MAX_F,
+        temp_unit: str = TEMP_F,
+        weight_unit: str = WEIGHT_KG,
     ) -> None:
         """Refresh option-flow flags (called by coordinator on options update)."""
         self._auto_cook_enabled = auto_cook
@@ -158,6 +166,16 @@ class CookManager:
         self._push_enabled = push
         # Honor the user's ceiling, but never above the hard safety cap.
         self._max_pit_f = max(PIT_CLAMP_MIN_F, min(PIT_CLAMP_MAX_F, int(max_pit_f)))
+        self._temp_unit = temp_unit
+        self._weight_unit = weight_unit
+
+    def _ftemp(self, value_f: float | None) -> str:
+        """Format a Fahrenheit value for notifications in the chosen unit."""
+        return fmt_temp(value_f, self._temp_unit)
+
+    def _fweight(self, value_kg: float | None) -> str:
+        """Format a kilogram value for notifications in the chosen unit."""
+        return fmt_weight(value_kg, self._weight_unit)
 
     async def async_init_db(self) -> None:
         """Create schema and import meat reference data if missing."""
@@ -278,7 +296,10 @@ class CookManager:
         # Two-layer guardrail per HANDOFF: also check physics-derived max at 150°F.
         slow = compute_at(meat_key, weight_lbs, PIT_CLAMP_MIN_F)
         if slow is not None and slow.total_hours < projection.total_hours:
-            warnings.append("computed pit target slower than 150°F floor — review inputs")
+            warnings.append(
+                f"computed pit target slower than the {self._ftemp(PIT_CLAMP_MIN_F)} "
+                "floor — review inputs"
+            )
 
         return PreFlightResult(
             ok=True,
@@ -331,22 +352,38 @@ class CookManager:
         self.session = session
         await self.hass.async_add_executor_job(self._insert_session_sync, session)
 
-        # PLANNED → PREHEATING: auto power-on permitted here only.
-        if snapshot.power_state is PowerState.OFF:
-            try:
-                await self.coordinator.async_power_on()
-            except Exception:  # noqa: BLE001 — broad to never break user start
-                LOGGER.exception("auto power-on failed at PLANNED→PREHEATING")
-        await self._set_pit_target(pf.pit_target_f, reason="preheat")
-        session.state = CookState.PREHEATING
-        session.preheat_started_at = now
-        self._notify(
-            title="Auto-Cook started",
-            message=(
-                f"{CP_MEATS[meat_key].label} — preheating to {pf.pit_target_f}°F. "
-                f"Projected {pf.projection.total_hours:.1f}h."
-            ),
-        )
+        label = CP_MEATS[meat_key].label
+        target = pf.pit_target_f
+        proj_h = pf.projection.total_hours
+        if mode is CookMode.COACH:
+            # Coach never touches the grill — it only advises the user.
+            session.state = CookState.PREHEATING
+            session.preheat_started_at = now
+            self._notify(
+                title="Auto-Cook (coach) started",
+                message=(
+                    f"{label} ({self._fweight(weight_kg)}) — power on the grill and set the "
+                    f"pit to {self._ftemp(target)}. Projected {proj_h:.1f}h. I'll track "
+                    f"progress and advise, but I won't change the grill."
+                ),
+            )
+        else:
+            # PLANNED → PREHEATING: auto power-on permitted here only.
+            if snapshot.power_state is PowerState.OFF:
+                try:
+                    await self.coordinator.async_power_on()
+                except Exception:  # noqa: BLE001 — broad to never break user start
+                    LOGGER.exception("auto power-on failed at PLANNED→PREHEATING")
+            await self._set_pit_target(target, reason="preheat")
+            session.state = CookState.PREHEATING
+            session.preheat_started_at = now
+            self._notify(
+                title="Auto-Cook started",
+                message=(
+                    f"{label} ({self._fweight(weight_kg)}) — preheating to "
+                    f"{self._ftemp(target)}. Projected {proj_h:.1f}h."
+                ),
+            )
         if pf.warnings:
             self._notify(
                 title="Auto-Cook pre-flight warnings",
@@ -397,7 +434,7 @@ class CookManager:
         ):
             self._notify(
                 title="Auto-Cook: grill failure suspected",
-                message=f"Pit dropped to {snapshot.grill_temp}°F. Check grill.",
+                message=f"Pit dropped to {self._ftemp(snapshot.grill_temp)}. Check grill.",
                 critical=True,
             )
 
@@ -421,7 +458,7 @@ class CookManager:
                     session.state = CookState.WAITING_MEAT
                     self._notify(
                         title="Grill ready",
-                        message=f"At {snapshot.grill_temp}°F — insert probe into meat.",
+                        message=f"At {self._ftemp(snapshot.grill_temp)} — insert probe into meat.",
                     )
             else:
                 session.preheat_ready_since = None
@@ -445,7 +482,9 @@ class CookManager:
                     session.pull_reached_at = now
                     self._notify(
                         title="Pull temp reached",
-                        message=f"Probe at {probe_f:.0f}°F (target {pull_f}°F).",
+                        message=(
+                            f"Probe at {self._ftemp(probe_f)} (target {self._ftemp(pull_f)})."
+                        ),
                         critical=True,
                     )
                     return
@@ -454,13 +493,18 @@ class CookManager:
                     self._notify(
                         title="Approaching pull",
                         message=(
-                            f"Within {APPROACHING_BAND_F}°F of {pull_f}°F. "
+                            f"Approaching the {self._ftemp(pull_f)} pull target. "
                             "No further pit adjustments."
                         ),
                     )
-            # Control only during COOKING (not APPROACHING).
+            # Control only during COOKING (not APPROACHING), and only in the
+            # modes that permit it: autonomous adjusts the grill; coach advises
+            # the user; set-and-forget leaves the grill alone after preheat.
             if session.state is CookState.COOKING and probe_f is not None:
-                await self._maybe_adjust_pit(session, snapshot, probe_f, now)
+                if session.mode is CookMode.AUTONOMOUS:
+                    await self._maybe_adjust_pit(session, snapshot, probe_f, now)
+                elif session.mode is CookMode.COACH:
+                    self._maybe_advise_pit(session, probe_f, now)
             return
 
         if session.state is CookState.PULL_REACHED:
@@ -470,7 +514,7 @@ class CookManager:
                 session.last_pull_notify_at = now
                 self._notify(
                     title="Pull temp reached",
-                    message=f"Probe {probe_f}°F — pull the meat.",
+                    message=f"Probe {self._ftemp(probe_f)} — pull the meat.",
                 )
             # Completion: probe sentinel or rapid drop or grill off.
             if (
@@ -553,6 +597,62 @@ class CookManager:
             return
         await self._set_pit_target(int(new_set), reason=f"adjust ({phase})")
         session.last_adj_at = now
+
+    def _maybe_advise_pit(self, session: CookSession, probe_f: float, now: float) -> None:
+        """Coach mode: notify the user to nudge the pit, but never write to it."""
+        if session.cook_started_at is None:
+            return
+        elapsed_h = (now - session.cook_started_at) / 3600
+        expected = expected_probe_at(session.projection, elapsed_h)
+        delta = expected - probe_f  # > 0 = behind schedule
+        if abs(delta) < COACH_ADVISE_BAND_F:
+            return
+        if now - session.last_adj_at < COACH_ADVISE_INTERVAL_S:
+            return
+        session.last_adj_at = now
+        if delta > 0:
+            self._notify(
+                title="Coach: running behind",
+                message=(
+                    f"Probe {self._ftemp(probe_f)} vs expected {self._ftemp(expected)}. "
+                    "Consider raising the pit setpoint."
+                ),
+            )
+        else:
+            self._notify(
+                title="Coach: ahead of schedule",
+                message=(
+                    f"Probe {self._ftemp(probe_f)} vs expected {self._ftemp(expected)}. "
+                    f"Consider lowering the pit toward {self._ftemp(session.pit_target_f)}."
+                ),
+            )
+
+    def mark_meat_on(self) -> None:
+        """User override: the probe is in the meat — begin tracking now.
+
+        Covers the case where the probe was already buried in cold meat before
+        the cook started, so no probe-drop event ever fires (see HANDOFF).
+        """
+        session = self.session
+        if session is None:
+            self._notify(
+                title="Meat-on ignored",
+                message="No active cook session to apply 'meat is on' to.",
+            )
+            return
+        if session.state not in (
+            CookState.PLANNED,
+            CookState.PREHEATING,
+            CookState.WAITING_MEAT,
+        ):
+            return
+        session.state = CookState.COOKING
+        session.cook_started_at = time.time()
+        session.preheat_ready_since = None
+        self._notify(
+            title="Cook started",
+            message="Meat-on override — tracking the cook now.",
+        )
 
     async def _set_pit_target(self, pit_f: int, *, reason: str) -> None:
         clamped = max(PIT_CLAMP_MIN_F, min(self._max_pit_f, pit_f))

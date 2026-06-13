@@ -6,6 +6,8 @@ import logging
 
 from homeassistant.const import Platform
 
+from .units import TEMP_UNIT_AUTO, WEIGHT_UNIT_AUTO
+
 DOMAIN = "gmg"
 LOGGER = logging.getLogger(__package__)
 
@@ -34,6 +36,12 @@ CONF_AUTO_COOK_PUSH = "auto_cook_push_notifications"
 # User-configurable ceiling for the grill setpoint (manual + auto-cook).
 CONF_MAX_GRILL_TEMP_F = "max_grill_temp_f"
 
+# Display-unit preferences (options flow). Default: follow Home Assistant.
+CONF_TEMPERATURE_UNIT = "temperature_unit"
+CONF_WEIGHT_UNIT = "weight_unit"
+DEFAULT_TEMPERATURE_UNIT = TEMP_UNIT_AUTO
+DEFAULT_WEIGHT_UNIT = WEIGHT_UNIT_AUTO
+
 MANUFACTURER = "Green Mountain Grills"
 
 MIN_GRILL_TEMP_F = 150
@@ -48,5 +56,9 @@ MAX_PROBE_TARGET_F = 257
 MIN_COOK_WEIGHT_KG = 0.2
 MAX_COOK_WEIGHT_KG = 12.0
 COOK_WEIGHT_STEP_KG = 0.1
+# Pound-equivalent bounds for the cook-weight number when weight_unit = pounds.
+MIN_COOK_WEIGHT_LB = 0.5
+MAX_COOK_WEIGHT_LB = 26.0
+COOK_WEIGHT_STEP_LB = 0.25
 MIN_FINISH_IN_HOURS = 1.0
 MAX_FINISH_IN_HOURS = 30.0

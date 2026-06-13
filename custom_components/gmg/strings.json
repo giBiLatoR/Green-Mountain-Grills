@@ -60,6 +60,8 @@
         "data": {
           "scan_interval": "Polling interval (seconds)",
           "max_grill_temp_f": "Maximum grill temperature (°F)",
+          "temperature_unit": "Temperature unit",
+          "weight_unit": "Weight unit",
           "auto_cook_enabled": "Enable Auto Cook",
           "auto_cook_dev_mode": "Auto Cook dev-mode logging",
           "auto_cook_push_notifications": "Push notifications for cook events"
@@ -67,6 +69,8 @@
         "data_description": {
           "scan_interval": "How often Home Assistant polls the grill for state. Lower values give snappier updates but more network chatter.",
           "max_grill_temp_f": "Ceiling for the grill setpoint. Caps both the manual temperature slider and the auto-cook controller, so the grill is never told to go hotter than this. Set it to your grill's real-world maximum.",
+          "temperature_unit": "Display unit for all GMG temperatures (grill, probes, setpoints, cook plan) and notifications. 'Follow Home Assistant' uses your system unit; choosing °C or °F overrides it for this grill only.",
+          "weight_unit": "Display unit for the cook-weight input and notifications. 'Follow Home Assistant' uses your system unit; choosing kg or lb overrides it.",
           "auto_cook_enabled": "Run the physics-based auto-cook controller on every poll. Disabled by default.",
           "auto_cook_dev_mode": "Log every poll into SQLite during active cooks for later analysis.",
           "auto_cook_push_notifications": "Mirror persistent notifications to any mobile_app.* notify services."
@@ -229,6 +233,9 @@
       },
       "abort_cook": {
         "name": "Abort auto cook"
+      },
+      "meat_on": {
+        "name": "Meat is on"
       }
     },
     "select": {
