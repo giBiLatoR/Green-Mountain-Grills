@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant import config_entries, data_entry_flow
-from homeassistant.components import dhcp
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.gmg.api import (
@@ -102,7 +102,7 @@ async def test_user_flow_already_configured(
 
 async def test_dhcp_discovery_creates_entry(hass: HomeAssistant, mock_client) -> None:
     """A DHCP discovery should walk through confirm and create an entry."""
-    discovery = dhcp.DhcpServiceInfo(
+    discovery = DhcpServiceInfo(
         ip="192.0.2.10",
         hostname="gmg-grill",
         macaddress="aa:bb:cc:dd:ee:ff",
@@ -124,7 +124,7 @@ async def test_dhcp_discovery_updates_existing(
 ) -> None:
     """DHCP that matches an existing serial should update its host."""
     mock_config_entry.add_to_hass(hass)
-    discovery = dhcp.DhcpServiceInfo(
+    discovery = DhcpServiceInfo(
         ip="192.0.2.55",
         hostname="gmg-grill",
         macaddress="aa:bb:cc:dd:ee:ff",
