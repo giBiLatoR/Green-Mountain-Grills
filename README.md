@@ -44,6 +44,68 @@ dependency.
 
 **Fork maintained by [giBiLatoR](https://github.com/giBiLatoR). Original integration by [hallyaus](https://github.com/hallyaus).**
 
+![GMG auto-cook overlay](docs/preview-overlay.png)
+
+*The auto-cook overlay: phase, live grill/probe temperatures, and a heating glow.
+A neutral silhouette ships by default — your model's artwork loads automatically.*
+
+## What this fork adds — the interface
+
+The upstream integration by **[hallyaus](https://github.com/hallyaus)** gives you
+rock-solid **local control**: a climate entity, temperature / probe / fault
+sensors, power and cold-smoke buttons, LAN + DHCP discovery, and diagnostics —
+all over your own network, no cloud. This fork keeps every bit of that and adds
+a **cooking interface** on top:
+
+- **Auto-Cook controller** — tell it the meat, the weight, and when you want to
+  eat; a heat-diffusion model picks the pit temperature and keeps the cook on
+  schedule with small, rate-limited nudges. It never powers the grill off by
+  itself.
+- **One-line dashboard** — a bundled Lovelace strategy (`custom:gmg-smoker`)
+  auto-builds the smoker view from your device: the picture overlay above,
+  context-aware controls, **Pace** (ahead/behind), an **ETA clock**, and a
+  *Cook Progress vs Plan* graph. No entity IDs to wire.
+- **Per-model artwork** — the overlay shows your grill's silhouette, auto-picked
+  by model.
+- **Safety & polish** — a configurable **maximum grill temperature** and
+  natural-language meat names ("Pork Butt — Pulled Pork", not `pork_butt_pulled`).
+
+## Setup
+
+1. **Install the integration.**
+   - *HACS:* HACS → ⋮ → *Custom repositories* → add
+     `https://github.com/giBiLatoR/Green-Mountain-Grills` (category
+     *Integration*) → install **Green Mountain Grills** → **restart Home
+     Assistant**.
+   - *Manual:* copy `custom_components/gmg/` into your HA `config/custom_components/`
+     folder and **restart Home Assistant**.
+2. **Add your grill.** Settings → Devices & Services → **Add Integration** →
+   *Green Mountain Grills*. It scans the LAN (UDP `8080`) and lists any grills
+   found; or enter the IP manually. The grill must be on local WiFi, **not
+   Server Mode** (toggle that in the GMG app).
+3. **Set a temperature ceiling** *(optional, recommended).* On the integration
+   tile → **Configure** → **Maximum grill temperature**. Caps the manual setpoint
+   *and* Auto-Cook so the grill is never told to run hotter than your unit can.
+4. **Enable Auto-Cook** *(optional).* Same **Configure** dialog → tick **Enable
+   Auto Cook**. (Off by default; the cook phase stays *idle* until it's on.)
+5. **Add the dashboard.** Make a new view in YAML mode and paste:
+   ```yaml
+   strategy:
+     type: custom:gmg-smoker
+     # serial: GMG12137138   # only if you have more than one grill
+     # show_graph: false     # set if you don't run apexcharts-card
+   ```
+   For the heating glow and the progress graph, install the HACS cards
+   [`card-mod`](https://github.com/thomasloven/lovelace-card-mod) and
+   [`apexcharts-card`](https://github.com/RomRider/apexcharts-card).
+6. **Add your model's photo** *(optional).* Drop a transparent PNG named
+   `<model_id>.png` into `custom_components/gmg/static/models/` — picked up
+   automatically (see [the model table](#prebuilt-dashboard-auto-strategy)).
+7. **Restart once** after first install so the dashboard assets register.
+
+A full walkthrough of an actual cook is in
+[Using Auto Cook, start to finish](#using-auto-cook-start-to-finish).
+
 ## How it works (the simple version)
 
 Think of your pellet grill as an oven that burns little wood pellets to make heat and smoke. This add-on talks to the grill over your home WiFi (no internet or cloud needed) and does two jobs:
