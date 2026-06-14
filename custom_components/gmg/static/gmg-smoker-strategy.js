@@ -142,38 +142,10 @@ function buildOverlay(image, e) {
       },
     });
   }
-  if (e.grillTemp) {
-    elements.push({
-      type: "state-label",
-      entity: e.grillTemp,
-      suffix: "\nGrill",
-      style: {
-        top: "64%",
-        left: "38%",
-        color: "#ff6d00",
-        "font-size": "24px",
-        "font-weight": "bold",
-        "text-align": "center",
-        "white-space": "pre",
-      },
-    });
-  }
-  if (e.probe1) {
-    elements.push({
-      type: "state-label",
-      entity: e.probe1,
-      suffix: "\nProbe",
-      style: {
-        top: "64%",
-        left: "68%",
-        color: "#2196f3",
-        "font-size": "24px",
-        "font-weight": "bold",
-        "text-align": "center",
-        "white-space": "pre",
-      },
-    });
-  }
+  // Grill + probe temps are rendered by GmgSmokerCard as a custom two-line
+  // overlay (value over label). A built-in state-label can't do this: HA forces
+  // white-space:nowrap on the label's inner div, collapsing a "\n" suffix to a
+  // space — so "72°F" and "Grill" can never sit on separate lines.
   if (e.climate) {
     // Power toggle: tap to start heating when off, confirm-shutdown when on.
     elements.push({
@@ -256,6 +228,35 @@ function buildOverlay(image, e) {
   // Plain built-in picture-elements card. The heating glow is applied natively
   // by GmgSmokerCard (no card-mod dependency).
   return { type: "picture-elements", image, elements };
+}
+
+// Build a two-line temp readout (value over label) positioned over the smoker
+// image. Returns the value <span> so the card can update it on each hass tick.
+function addTempReadout(host, cls, label) {
+  const wrap = document.createElement("div");
+  wrap.className = "gmg-temp " + cls;
+  const v = document.createElement("span");
+  v.className = "v";
+  const l = document.createElement("span");
+  l.className = "l";
+  l.textContent = label;
+  wrap.appendChild(v);
+  wrap.appendChild(l);
+  host.appendChild(wrap);
+  return v;
+}
+
+// Format a temperature into "72°F" (no space, matching the smoker display).
+function setTempText(el, stateObj) {
+  if (!el) return;
+  const s = stateObj && stateObj.state;
+  if (s == null || s === "" || s === "unknown" || s === "unavailable") {
+    el.textContent = "—";
+    return;
+  }
+  const n = Number(s);
+  const unit = (stateObj.attributes && stateObj.attributes.unit_of_measurement) || "";
+  el.textContent = (Number.isFinite(n) ? Math.round(n) : s) + unit;
 }
 
 function buildControls(e) {
@@ -605,8 +606,16 @@ class GmgCookChart extends HTMLElement {
 // as ONE card, auto-resolved from your GMG device, with a native heating glow.
 const GMG_CARD_CSS = `
   .gmg-col { display: flex; flex-direction: column; gap: 12px; }
-  .gmg-glow { border-radius: var(--ha-card-border-radius, 12px); transition: box-shadow 0.4s ease; }
+  .gmg-glow { position: relative; border-radius: var(--ha-card-border-radius, 12px); transition: box-shadow 0.4s ease; }
   .gmg-glow.heating { box-shadow: 0 0 22px 6px rgba(255, 109, 0, 0.55); }
+  .gmg-temp { position: absolute; transform: translate(-50%, -50%); z-index: 1;
+              display: flex; flex-direction: column; align-items: center; line-height: 1.04;
+              font-weight: bold; text-align: center; pointer-events: none;
+              text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75); }
+  .gmg-temp .v { font-size: 16px; }
+  .gmg-temp .l { font-size: 10px; font-weight: 600; letter-spacing: 0.5px; opacity: 0.92; }
+  .gmg-temp-grill { top: 64%; left: 38%; color: #ff6d00; }
+  .gmg-temp-probe { top: 64%; left: 68%; color: #2196f3; }
 `;
 
 class GmgSmokerCard extends HTMLElement {
@@ -628,6 +637,7 @@ class GmgSmokerCard extends HTMLElement {
     if (!inner) return;
     inner.overlay.hass = hass;
     inner.controls.hass = hass;
+    this._updateTemps(hass);
     if (inner.chart) {
       const span = graphSpanMinutes(hass, this._elapsed);
       if (span !== this._chartSpan) {
@@ -643,6 +653,12 @@ class GmgSmokerCard extends HTMLElement {
     if (!this._glowHost || !this._climate) return;
     const st = hass.states[this._climate];
     this._glowHost.classList.toggle("heating", !!(st && st.state === "heat"));
+  }
+
+  _updateTemps(hass) {
+    if (!hass || !this._tempEls) return;
+    if (this._tempEls.grill) setTempText(this._tempEls.grill, hass.states[this._grillId]);
+    if (this._tempEls.probe) setTempText(this._tempEls.probe, hass.states[this._probe1Id]);
   }
 
   _msgCard(text) {
@@ -682,6 +698,12 @@ class GmgSmokerCard extends HTMLElement {
       const glowHost = document.createElement("div");
       glowHost.className = "gmg-glow";
       glowHost.appendChild(overlay);
+      this._grillId = e.grillTemp;
+      this._probe1Id = e.probe1;
+      this._tempEls = {};
+      if (e.grillTemp) this._tempEls.grill = addTempReadout(glowHost, "gmg-temp-grill", "Grill");
+      if (e.probe1) this._tempEls.probe = addTempReadout(glowHost, "gmg-temp-probe", "Probe");
+      this._updateTemps(hass);
       this._glowHost = glowHost;
       col.appendChild(glowHost);
       col.appendChild(controls);
