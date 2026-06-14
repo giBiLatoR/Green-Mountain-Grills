@@ -41,6 +41,8 @@ class Meat:
     rest_min: int
     foil: bool
     max_hours: float
+    by_the_piece: bool = False
+    fixed_pit_f: int | None = None
 
 
 def _l_linear(intercept: float, slope: float = 0.0) -> Callable[[float], float]:
@@ -182,6 +184,8 @@ CP_MEATS: dict[str, Meat] = {
         rest_min=5,
         foil=False,
         max_hours=4.0,
+        by_the_piece=True,
+        fixed_pit_f=275,
     ),
     "pork_loin": Meat(
         "pork_loin",
@@ -281,6 +285,8 @@ CP_MEATS: dict[str, Meat] = {
         rest_min=5,
         foil=False,
         max_hours=3.0,
+        by_the_piece=True,
+        fixed_pit_f=250,
     ),
 }
 
@@ -422,6 +428,24 @@ def expected_probe_at(
             return ph.start_internal_f + frac * (ph.end_internal_f - ph.start_internal_f)
         cum += ph.hours
     return projection.phases[-1].end_internal_f
+
+
+def elapsed_at_probe(projection: CookProjection, probe_f: float) -> float:
+    """Elapsed hours at which the projection expects the probe to read probe_f.
+    Inverse of expected_probe_at; used for a live time-remaining that tracks the
+    food's actual position on the curve."""
+    first = projection.phases[0]
+    if probe_f <= first.start_internal_f:
+        return 0.0
+    cum = 0.0
+    for ph in projection.phases:
+        if probe_f <= ph.end_internal_f:
+            if ph.hours <= 0:
+                return cum
+            frac = (probe_f - ph.start_internal_f) / (ph.end_internal_f - ph.start_internal_f)
+            return cum + max(0.0, min(1.0, frac)) * ph.hours
+        cum += ph.hours
+    return projection.total_hours
 
 
 def phase_at(projection: CookProjection, probe_f: float, pull_f: int) -> str:

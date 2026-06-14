@@ -274,6 +274,15 @@ function buildControls(e) {
 
   const cond = (c, row) => (row.entity || row.type ? { type: "conditional", ...c, row } : null);
 
+  // By-the-piece meats (constant thickness): weight & finish-in are meaningless.
+  // Row shows only when the meat is neither sausage/brats nor chicken breast.
+  const byThePieceNot = e.meatType
+    ? [
+        { entity: e.meatType, state_not: "sausage_brats" },
+        { entity: e.meatType, state_not: "chicken_breast" },
+      ]
+    : [];
+
   const rows = compact([
     // --- Auto-cook setup (idle) ---
     e.cookState && { type: "section", label: "Auto-Cook Setup" },
@@ -282,15 +291,16 @@ function buildControls(e) {
     e.cookMode && cond(idle(), { entity: e.cookMode, name: "Mode", icon: "mdi:cog" }),
     e.cookProbe &&
       cond(idle(), { entity: e.cookProbe, name: "Primary probe", icon: "mdi:thermometer-probe" }),
-    // Weight is meaningless for by-the-piece items — hide for sausage/brats.
+    // Weight is meaningless for by-the-piece items — hide for sausage/brats
+    // and chicken breast (constant-thickness "by the piece" meats).
     e.weight &&
-      cond(idle(e.meatType ? [{ entity: e.meatType, state_not: "sausage_brats" }] : []), {
+      cond(idle(byThePieceNot), {
         entity: e.weight,
         name: "Meat weight",
         icon: "mdi:weight-kilogram",
       }),
     e.finishIn &&
-      cond(idle(), { entity: e.finishIn, name: "Finish in (h)", icon: "mdi:clock-outline" }),
+      cond(idle(byThePieceNot), { entity: e.finishIn, name: "Finish in (h)", icon: "mdi:clock-outline" }),
     e.startCook &&
       cond(idle(), { entity: e.startCook, name: "▶  Start Auto-Cook", icon: "mdi:play-circle" }),
 

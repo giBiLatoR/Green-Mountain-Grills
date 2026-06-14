@@ -59,6 +59,8 @@ PROBE_UNPLUGGED_SENTINEL_F = 89  # Probe pulled from meat.
 DB_FILENAME = "gmg_cooks.db"
 COACH_ADVISE_BAND_F = 8  # Coach mode advises when off-schedule by this much.
 COACH_ADVISE_INTERVAL_S = 900  # …at most once every 15 min.
+LAUNCH_READY_TEMP_F = 150  # Defer pit setpoint until the grill is at least this hot.
+PREHEAT_MINUTES = 10  # Startup time budgeted into cook planning.
 
 
 class CookState(StrEnum):
@@ -108,6 +110,7 @@ class CookSession:
     last_pit_set_f: int = 0
     pull_reached_at: float | None = None
     last_pull_notify_at: float = 0.0
+    pit_target_applied: bool = False
     probe_history: list[_ProbeSample] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -275,14 +278,20 @@ class CookManager:
             raise CookManagerError(f"unknown meat key: {meat_key}")
         if weight_kg <= 0:
             raise CookManagerError("weight must be > 0 kg")
-        if finish_in_hours <= 0.5:
-            raise CookManagerError("finish time too soon (>0.5h required)")
         weight_lbs = weight_kg * 2.20462
-        cook_hrs = finish_in_hours - (meat.rest_min / 60) - 0.5
-        if cook_hrs <= 0.25:
-            raise CookManagerError("not enough cook time after rest + preheat budget")
-        pit_target = find_exact_temp(meat_key, weight_lbs, cook_hrs)
-        pit_target = max(PIT_CLAMP_MIN_F, min(self._max_pit_f, round(pit_target)))
+        if meat.fixed_pit_f is not None:
+            # Fixed-pit meats ignore the finish-time solve entirely.
+            pit_target = max(PIT_CLAMP_MIN_F, min(self._max_pit_f, meat.fixed_pit_f))
+        else:
+            if finish_in_hours <= 0.5:
+                raise CookManagerError("finish time too soon (>0.5h required)")
+            cook_hrs = finish_in_hours - (meat.rest_min / 60) - (PREHEAT_MINUTES / 60)
+            if cook_hrs <= 0.25:
+                raise CookManagerError("not enough cook time after startup + rest budget")
+            pit_target = max(
+                PIT_CLAMP_MIN_F,
+                min(self._max_pit_f, round(find_exact_temp(meat_key, weight_lbs, cook_hrs))),
+            )
         projection = compute_at(meat_key, weight_lbs, pit_target)
         if projection is None:
             raise CookManagerError("physics model failed to converge")
@@ -374,7 +383,12 @@ class CookManager:
                     await self.coordinator.async_power_on()
                 except Exception:  # noqa: BLE001 — broad to never break user start
                     LOGGER.exception("auto power-on failed at PLANNED→PREHEATING")
-            await self._set_pit_target(target, reason="preheat")
+            # Only push the setpoint now if the grill is already hot; otherwise
+            # defer to update() so a cold-start ignition isn't disturbed.
+            if snapshot.grill_temp >= LAUNCH_READY_TEMP_F:
+                await self._set_pit_target(target, reason="preheat")
+                session.pit_target_applied = True
+            # else defer to update()
             session.state = CookState.PREHEATING
             session.preheat_started_at = now
             self._notify(
@@ -440,6 +454,16 @@ class CookManager:
 
         # State transitions ------------------------------------------------
         if session.state is CookState.PREHEATING:
+            # Apply the deferred cold-start setpoint once the grill is hot.
+            if (
+                session.mode is not CookMode.COACH
+                and not session.pit_target_applied
+                and snapshot.grill_temp >= LAUNCH_READY_TEMP_F
+            ):
+                await self._set_pit_target(
+                    session.pit_target_f, reason="preheat (launch complete)"
+                )
+                session.pit_target_applied = True
             # Short-on-time path: a sharp probe drop during preheat means the
             # meat went on before the grill settled — start cooking right away
             # instead of waiting for the "grill ready" prompt.

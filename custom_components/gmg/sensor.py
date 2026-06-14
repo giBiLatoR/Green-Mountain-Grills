@@ -16,7 +16,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature, U
 
 from .api import FireState, PowerState, WarnCode
 from .cook_manager import CookState
-from .cook_physics import CP_MEATS, expected_probe_at
+from .cook_physics import CP_MEATS, elapsed_at_probe, expected_probe_at
 from .entity import GMGBaseEntity
 
 if TYPE_CHECKING:
@@ -127,10 +127,15 @@ def _cook_remaining_minutes(c: GMGCoordinator) -> StateType:
     s = c.cook_manager.session
     if s is None or s.cook_started_at is None:
         return None
+    probe = c.data.probe_1_temp if s.probe_index == 1 else c.data.probe_2_temp
+    if probe is not None:
+        # Live forecast: anchor remaining time to where the probe actually is on
+        # the projection curve rather than wall-clock elapsed.
+        elapsed_h = elapsed_at_probe(s.projection, float(probe))
+        return round(max(0.0, (s.projection.total_hours - elapsed_h) * 60), 1)
+    # No probe reading: fall back to a static wall-clock countdown.
     total_min = s.projection.total_hours * 60
-    elapsed_min = (time.time() - s.cook_started_at) / 60
-    remaining = total_min - elapsed_min
-    return round(max(0.0, remaining), 1)
+    return round(max(0.0, total_min - (time.time() - s.cook_started_at) / 60), 1)
 
 
 def _cook_expected_probe(c: GMGCoordinator) -> StateType:

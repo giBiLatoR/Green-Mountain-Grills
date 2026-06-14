@@ -11,6 +11,7 @@ from custom_components.gmg.cook_physics import (
     CP_MEATS,
     CookProjection,
     compute_at,
+    elapsed_at_probe,
     expected_probe_at,
     find_exact_temp,
     phase_at,
@@ -96,6 +97,28 @@ def test_expected_probe_monotonic_in_elapsed() -> None:
     samples = [expected_probe_at(res, h) for h in (0.5, 2.0, 5.0, 9.0, 15.0)]
     for prev, nxt in itertools.pairwise(samples):
         assert nxt >= prev
+
+
+def test_elapsed_at_probe_single_phase_round_trip() -> None:
+    """elapsed_at_probe inverts expected_probe_at on a strictly-increasing single phase."""
+    res = compute_at("whole_chicken", 2.0, 350.0)
+    assert res is not None
+    # whole_chicken is non-stall → one strictly-increasing 'Smoke' phase.
+    assert len(res.phases) == 1
+    assert res.phases[0].name == "Smoke"
+
+    # Start of the phase → zero elapsed.
+    assert elapsed_at_probe(res, res.phases[0].start_internal_f) == 0.0
+
+    # Pull temp (last phase end) → full projected time.
+    pull_f = CP_MEATS["whole_chicken"].pull_f
+    assert pull_f == res.phases[0].end_internal_f
+    assert elapsed_at_probe(res, pull_f) == pytest.approx(res.total_hours)
+
+    # Round-trip a probe value strictly inside the phase.
+    p = (res.phases[0].start_internal_f + pull_f) / 2
+    assert res.phases[0].start_internal_f < p < pull_f
+    assert expected_probe_at(res, elapsed_at_probe(res, p)) == pytest.approx(p)
 
 
 def test_phase_at_classifies_probe_temps() -> None:
