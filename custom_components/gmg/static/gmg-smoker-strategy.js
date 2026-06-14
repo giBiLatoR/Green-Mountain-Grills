@@ -1,20 +1,20 @@
 /*
- * GMG Smoker — Lovelace auto-strategy
+ * GMG Smoker — Lovelace card + auto-strategy
  * Ships with the Green Mountain Grills integration (served at /gmg_static/).
  *
- * Builds a smoker overlay + controls view automatically from the GMG device,
- * resolving entities by their registry translation_key so it survives renames
- * and is independent of any user-created helpers. Temperatures are shown in
- * Home Assistant's own unit system (no hard-coded °F conversion).
+ * Fully self-contained: builds a smoker overlay, controls and a live cook chart
+ * with NO external HACS cards. The chart is a native inline-SVG element drawn
+ * from the recorder history (no apexcharts-card); the heating glow is plain CSS
+ * baked into the card (no card-mod). Only built-in Lovelace cards
+ * (picture-elements, entities) are used for the overlay and controls.
  *
  * Add a view with:
  *   strategy:
  *     type: custom:gmg-smoker
  *     serial: GMG12137138   # optional; auto-detects the only GMG device
- *     show_graph: true      # optional; needs the apexcharts-card HACS card
+ *     show_graph: true      # optional
  *
- * Optional HACS cards for the full look: card-mod (glow/fan animation),
- * apexcharts-card (progress graph). The view still works without them.
+ * Or just add the "GMG Smoker" card from Edit -> Add Card.
  */
 
 const STATIC = "/gmg_static";
@@ -85,6 +85,45 @@ function onlyDomain(entities, domain) {
 
 // Drop null/undefined entries from a list (used to skip missing entities).
 const compact = (arr) => arr.filter((x) => x);
+
+function escapeHtml(s) {
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+// Map every GMG entity we care about off the device, by registry translation_key.
+function mapEntities(ents) {
+  return {
+    climate: onlyDomain(ents, "climate"),
+    grillTemp: byKey(ents, "sensor", "grill_temperature"),
+    probe1: byKey(ents, "sensor", "probe_1_temperature"),
+    probe2: byKey(ents, "sensor", "probe_2_temperature"),
+    cookState: byKey(ents, "sensor", "cook_state"),
+    cookMeat: byKey(ents, "sensor", "cook_meat"),
+    elapsed: byKey(ents, "sensor", "cook_elapsed_minutes"),
+    remaining: byKey(ents, "sensor", "cook_remaining_minutes"),
+    pitTarget: byKey(ents, "sensor", "cook_pit_target"),
+    expected: byKey(ents, "sensor", "cook_expected_probe_temp"),
+    pullTemp: byKey(ents, "sensor", "cook_pull_temp"),
+    warning: byKey(ents, "sensor", "warning"),
+    hopper: byKey(ents, "sensor", "hopper"),
+    onSchedule: byKey(ents, "binary_sensor", "cook_on_schedule"),
+    meatType: byKey(ents, "select", "cook_meat_type"),
+    cookMode: byKey(ents, "select", "cook_mode"),
+    cookProbe: byKey(ents, "select", "cook_probe"),
+    weight: byKey(ents, "number", "cook_weight_kg"),
+    finishIn: byKey(ents, "number", "cook_finish_in_hours"),
+    grillSet: byKey(ents, "number", "grill_setpoint"),
+    probe1Target: byKey(ents, "number", "probe_1_target"),
+    probe2Target: byKey(ents, "number", "probe_2_target"),
+    startCook: byKey(ents, "button", "start_cook"),
+    abortCook: byKey(ents, "button", "abort_cook"),
+    meatOn: byKey(ents, "button", "meat_on"),
+    coldSmoke: byKey(ents, "button", "cold_smoke"),
+  };
+}
 
 function buildOverlay(image, e) {
   const elements = [];
@@ -214,19 +253,9 @@ function buildOverlay(image, e) {
     });
   }
 
-  const card = { type: "picture-elements", image, elements };
-  // Optional glow (needs card-mod; ignored if not installed).
-  if (e.climate) {
-    card.card_mod = {
-      style: `ha-card {
-  {% if is_state('${e.climate}', 'heat') %}
-    box-shadow: 0 0 22px 6px rgba(255,109,0,0.55);
-  {% endif %}
-  border: none;
-}`,
-    };
-  }
-  return card;
+  // Plain built-in picture-elements card. The heating glow is applied natively
+  // by GmgSmokerCard (no card-mod dependency).
+  return { type: "picture-elements", image, elements };
 }
 
 function buildControls(e) {
@@ -293,32 +322,29 @@ function buildControls(e) {
   return { type: "entities", title: "Smoker Controls", show_header_toggle: false, state_color: true, entities: rows };
 }
 
-// Window the chart to the live cook. apexcharts-card ends the x-axis at "now"
-// by default, so a graph_span of (elapsed + a little) starts the axis at the
-// cook start with no pre-cook dead space, and grows with the cook so long cooks
-// are never truncated. cook_elapsed_minutes is None until COOKING — when there
-// is no active cook we fall back to a short window. Bucketed to 10-minute steps
-// so the custom card rebuilds at most every ~10 min (never per-minute), while
-// the bucket guarantees the span always covers the elapsed time (no truncation).
-const IDLE_GRAPH_SPAN = "4h";
-function graphSpan(hass, elapsedEntity) {
+// Window the chart to the live cook. The x-axis ends at "now"; a span of
+// (elapsed + a little) starts it at the cook start with no pre-cook dead space
+// and grows with the cook (long cooks are never truncated). cook_elapsed_minutes
+// is None until COOKING — when no cook is running we fall back to a short window.
+const IDLE_SPAN_MIN = 240;
+function graphSpanMinutes(hass, elapsedEntity) {
   const st = elapsedEntity && hass && hass.states ? hass.states[elapsedEntity] : null;
   const min = st ? Number(st.state) : NaN;
-  if (!Number.isFinite(min) || min <= 0) return IDLE_GRAPH_SPAN;
-  return `${Math.max(10, Math.ceil((min + 1) / 10) * 10)}min`;
+  if (!Number.isFinite(min) || min <= 0) return IDLE_SPAN_MIN;
+  return Math.max(10, Math.ceil(min) + 3);
 }
 
 function buildGraph(e, hass) {
   const series = compact([
-    e.probe1 && { entity: e.probe1, name: "Food actual", color: "#2196f3", stroke_width: 3, curve: "smooth" },
-    e.expected && { entity: e.expected, name: "Food expected", color: "#90caf9", stroke_width: 2, curve: "smooth" },
-    e.grillTemp && { entity: e.grillTemp, name: "Grill", color: "#ff6d00", stroke_width: 2, curve: "smooth", opacity: 0.5 },
+    e.probe1 && { entity: e.probe1, name: "Food actual", color: "#2196f3", width: 3 },
+    e.expected && { entity: e.expected, name: "Food expected", color: "#90caf9", width: 2, dashed: true },
+    e.grillTemp && { entity: e.grillTemp, name: "Grill", color: "#ff6d00", width: 2, opacity: 0.6 },
   ]);
   if (series.length < 2) return null;
   return {
-    type: "custom:apexcharts-card",
-    header: { show: true, title: "Cook Progress vs Plan", show_states: true },
-    graph_span: graphSpan(hass, e.elapsed),
+    type: "custom:gmg-cook-chart",
+    title: "Cook Progress vs Plan",
+    graph_span_minutes: graphSpanMinutes(hass, e.elapsed),
     series,
   };
 }
@@ -338,35 +364,7 @@ async function buildView(hass, config) {
     };
   }
 
-  const ents = deviceEntities(hass, device.id);
-  const e = {
-    climate: onlyDomain(ents, "climate"),
-    grillTemp: byKey(ents, "sensor", "grill_temperature"),
-    probe1: byKey(ents, "sensor", "probe_1_temperature"),
-    probe2: byKey(ents, "sensor", "probe_2_temperature"),
-    cookState: byKey(ents, "sensor", "cook_state"),
-    cookMeat: byKey(ents, "sensor", "cook_meat"),
-    elapsed: byKey(ents, "sensor", "cook_elapsed_minutes"),
-    remaining: byKey(ents, "sensor", "cook_remaining_minutes"),
-    pitTarget: byKey(ents, "sensor", "cook_pit_target"),
-    expected: byKey(ents, "sensor", "cook_expected_probe_temp"),
-    pullTemp: byKey(ents, "sensor", "cook_pull_temp"),
-    warning: byKey(ents, "sensor", "warning"),
-    hopper: byKey(ents, "sensor", "hopper"),
-    onSchedule: byKey(ents, "binary_sensor", "cook_on_schedule"),
-    meatType: byKey(ents, "select", "cook_meat_type"),
-    cookMode: byKey(ents, "select", "cook_mode"),
-    cookProbe: byKey(ents, "select", "cook_probe"),
-    weight: byKey(ents, "number", "cook_weight_kg"),
-    finishIn: byKey(ents, "number", "cook_finish_in_hours"),
-    grillSet: byKey(ents, "number", "grill_setpoint"),
-    probe1Target: byKey(ents, "number", "probe_1_target"),
-    probe2Target: byKey(ents, "number", "probe_2_target"),
-    startCook: byKey(ents, "button", "start_cook"),
-    abortCook: byKey(ents, "button", "abort_cook"),
-    meatOn: byKey(ents, "button", "meat_on"),
-    coldSmoke: byKey(ents, "button", "cold_smoke"),
-  };
+  const e = mapEntities(deviceEntities(hass, device.id));
 
   const cards = compact([
     buildOverlay(await resolveImage(device), e),
@@ -393,59 +391,320 @@ class GmgSmokerDashboardStrategy extends HTMLElement {
   }
 }
 
+// ---- Native cook chart (inline SVG, no external charting card) ----
+// A self-contained Lovelace card element that plots the recorder history of its
+// series over [now - graph_span_minutes, now]. Used internally by the smoker
+// card and strategy; also valid standalone as `type: custom:gmg-cook-chart`.
+const GMG_CHART_CSS = `
+  ha-card { padding: 12px 12px 8px; }
+  .gmg-chart-body { width: 100%; }
+  .gmg-svg { width: 100%; height: auto; display: block; }
+  .gmg-grid { stroke: var(--divider-color, #4a4a4a); stroke-width: 1; opacity: 0.5; }
+  .gmg-axis { fill: var(--secondary-text-color, #9aa0a6); font-size: 10px;
+              font-family: var(--paper-font-body1_-_font-family, "Roboto", sans-serif); }
+  .gmg-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px;
+                font-size: 12px; color: var(--primary-text-color, #e8eaed); }
+  .gmg-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+               margin-right: 5px; vertical-align: middle; }
+  .gmg-chart-msg { padding: 28px 8px; text-align: center;
+                   color: var(--secondary-text-color, #9aa0a6); }
+`;
+
+class GmgCookChart extends HTMLElement {
+  setConfig(config) {
+    config = config || {};
+    this._series = (config.series || []).filter((s) => s && s.entity);
+    this._spanMin =
+      Number(config.graph_span_minutes) > 0 ? Number(config.graph_span_minutes) : IDLE_SPAN_MIN;
+    this._title = config.title || "";
+    if (!this._shadow) {
+      this._shadow = this.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = GMG_CHART_CSS;
+      this._card = document.createElement("ha-card");
+      this._body = document.createElement("div");
+      this._body.className = "gmg-chart-body";
+      this._card.appendChild(this._body);
+      this._shadow.append(style, this._card);
+    }
+    if (this._title) this._card.setAttribute("header", this._title);
+    else this._card.removeAttribute("header");
+    if (this._hass) this._update(true);
+    else this._draw();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._update(false);
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  static getStubConfig() {
+    return { type: "custom:gmg-cook-chart", series: [] };
+  }
+
+  _update(force) {
+    if (!this._hass || !this._series.length) {
+      this._draw();
+      return;
+    }
+    const now = Date.now();
+    if (force || !this._data || now - (this._lastFetch || 0) > 30000) {
+      this._fetch();
+    } else {
+      this._draw();
+    }
+  }
+
+  async _fetch() {
+    if (this._fetching || !this._hass) return;
+    this._fetching = true;
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - this._spanMin * 60000);
+      const res = await this._hass.callWS({
+        type: "history/history_during_period",
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        entity_ids: this._series.map((s) => s.entity),
+        minimal_response: true,
+        no_attributes: true,
+        significant_changes_only: false,
+      });
+      this._data = res || {};
+      this._error = null;
+      this._lastFetch = Date.now();
+    } catch (err) {
+      this._error = err && err.message ? err.message : String(err);
+    } finally {
+      this._fetching = false;
+      this._draw();
+    }
+  }
+
+  _points(entityId) {
+    const raw = (this._data && this._data[entityId]) || [];
+    const pts = [];
+    for (const r of raw) {
+      const v = parseFloat(r.s != null ? r.s : r.state);
+      let t = r.lu != null ? r.lu : r.lc != null ? r.lc : null;
+      t = t != null ? t * 1000 : Date.parse(r.last_updated || r.last_changed || "");
+      if (Number.isFinite(v) && Number.isFinite(t)) pts.push([t, v]);
+    }
+    // Pin a fresh point at "now" from the live state so the right edge tracks.
+    const st = this._hass && this._hass.states[entityId];
+    if (st) {
+      const v = parseFloat(st.state);
+      if (Number.isFinite(v)) pts.push([Date.now(), v]);
+    }
+    pts.sort((a, b) => a[0] - b[0]);
+    return pts;
+  }
+
+  _draw() {
+    if (!this._body) return;
+    if (this._error) {
+      this._body.innerHTML = `<div class="gmg-chart-msg">Chart unavailable: ${escapeHtml(this._error)}</div>`;
+      return;
+    }
+    if (!this._series.length) {
+      this._body.innerHTML = `<div class="gmg-chart-msg">No probe data configured.</div>`;
+      return;
+    }
+    const series = this._series.map((s) => ({ ...s, pts: this._points(s.entity) }));
+    if (!series.some((s) => s.pts.length)) {
+      this._body.innerHTML = `<div class="gmg-chart-msg">Waiting for cook data…</div>`;
+      return;
+    }
+
+    const W = 600;
+    const H = 260;
+    const mL = 38;
+    const mR = 10;
+    const mT = 8;
+    const mB = 22;
+    const xmax = Date.now();
+    const xmin = xmax - this._spanMin * 60000;
+    let ymin = Infinity;
+    let ymax = -Infinity;
+    for (const s of series) {
+      for (const [t, v] of s.pts) {
+        if (t < xmin - 1) continue;
+        if (v < ymin) ymin = v;
+        if (v > ymax) ymax = v;
+      }
+    }
+    if (!Number.isFinite(ymin) || !Number.isFinite(ymax)) {
+      ymin = 0;
+      ymax = 1;
+    }
+    if (ymin === ymax) {
+      ymin -= 1;
+      ymax += 1;
+    }
+    const padY = (ymax - ymin) * 0.08;
+    ymin -= padY;
+    ymax += padY;
+    const xpx = (t) => mL + ((t - xmin) / (xmax - xmin)) * (W - mL - mR);
+    const ypx = (v) => mT + (1 - (v - ymin) / (ymax - ymin)) * (H - mT - mB);
+    const first = this._hass.states[this._series[0].entity];
+    const unit = (first && first.attributes && first.attributes.unit_of_measurement) || "";
+
+    let grid = "";
+    for (let i = 0; i <= 4; i++) {
+      const v = ymin + (i / 4) * (ymax - ymin);
+      const y = ypx(v).toFixed(1);
+      grid += `<line class="gmg-grid" x1="${mL}" y1="${y}" x2="${W - mR}" y2="${y}"/>`;
+      grid += `<text class="gmg-axis" x="${mL - 4}" y="${(Number(y) + 3).toFixed(1)}" text-anchor="end">${Math.round(v)}</text>`;
+    }
+
+    const spanH = this._spanMin / 60;
+    const stepH = spanH <= 2 ? 0.5 : spanH <= 6 ? 1 : spanH <= 12 ? 2 : 4;
+    let xticks = "";
+    for (let h = 0; h <= spanH + 1e-6; h += stepH) {
+      const t = xmax - h * 3600000;
+      if (t < xmin - 1) break;
+      const x = xpx(t).toFixed(1);
+      const label = h === 0 ? "now" : `-${h % 1 ? h.toFixed(1) : h}h`;
+      xticks += `<line class="gmg-grid" x1="${x}" y1="${mT}" x2="${x}" y2="${H - mB}"/>`;
+      xticks += `<text class="gmg-axis" x="${x}" y="${H - mB + 14}" text-anchor="middle">${label}</text>`;
+    }
+
+    let paths = "";
+    for (const s of series) {
+      const inWin = s.pts.filter(([t]) => t >= xmin - 1);
+      if (!inWin.length) continue;
+      const d = inWin
+        .map(([t, v], i) => `${i ? "L" : "M"}${xpx(t).toFixed(1)},${ypx(v).toFixed(1)}`)
+        .join(" ");
+      paths +=
+        `<path d="${d}" fill="none" stroke="${s.color || "#888"}" stroke-width="${s.width || 2}" ` +
+        `stroke-opacity="${s.opacity != null ? s.opacity : 1}" ${s.dashed ? 'stroke-dasharray="5 4"' : ""} ` +
+        `stroke-linejoin="round" stroke-linecap="round"/>`;
+    }
+
+    const svg = `<svg viewBox="0 0 ${W} ${H}" class="gmg-svg">${grid}${xticks}${paths}</svg>`;
+    const legend = series
+      .map((s) => {
+        const st = this._hass.states[s.entity];
+        const num = st ? parseFloat(st.state) : NaN;
+        const cur = Number.isFinite(num) ? `${Math.round(num)}${unit}` : "—";
+        return `<span class="gmg-leg"><i style="background:${s.color || "#888"};opacity:${s.opacity != null ? s.opacity : 1}"></i>${escapeHtml(s.name || s.entity)}: <b>${cur}</b></span>`;
+      })
+      .join("");
+    this._body.innerHTML = `${svg}<div class="gmg-legend">${legend}</div>`;
+  }
+}
+
 // ---- Custom card ----
-// The headline way to use this: in any dashboard, Edit -> Add Card -> "GMG
-// Smoker" (or YAML `type: custom:gmg-smoker-card`). Builds the same overlay +
-// controls (+ graph) as ONE card, auto-resolved from your GMG device.
+// In any dashboard: Edit -> Add Card -> "GMG Smoker" (or YAML
+// `type: custom:gmg-smoker-card`). Builds the overlay + controls + native chart
+// as ONE card, auto-resolved from your GMG device, with a native heating glow.
+const GMG_CARD_CSS = `
+  .gmg-col { display: flex; flex-direction: column; gap: 12px; }
+  .gmg-glow { border-radius: var(--ha-card-border-radius, 12px); transition: box-shadow 0.4s ease; }
+  .gmg-glow.heating { box-shadow: 0 0 22px 6px rgba(255, 109, 0, 0.55); }
+`;
+
 class GmgSmokerCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._built = false;
     this._inner = null;
-    this._sig = null;
-  }
-
-  // Rebuild the inner card when the cook phase changes or the elapsed-derived
-  // graph window grows a bucket; otherwise just forward hass. Keeps the chart
-  // tracking the live cook (its graph_span is baked in at build time) without
-  // re-rendering on every state update. Cheap in-memory resolution, no awaits.
-  _graphSig(hass) {
-    if (this._config && this._config.show_graph === false) return "no-graph";
-    try {
-      const device = findDevice(hass, this._config && this._config.serial);
-      if (!device) return "no-device";
-      const ents = deviceEntities(hass, device.id);
-      const cs = byKey(ents, "sensor", "cook_state");
-      const el = byKey(ents, "sensor", "cook_elapsed_minutes");
-      const phase = cs && hass.states[cs] ? hass.states[cs].state : "?";
-      return `${phase}|${graphSpan(hass, el)}`;
-    } catch (err) {
-      return "static";
-    }
   }
 
   set hass(hass) {
     this._hass = hass;
     if (!hass) return;
-    const sig = this._graphSig(hass);
-    if (!this._built || sig !== this._sig) {
+    if (!this._built) {
       this._built = true;
-      this._sig = sig;
       this._render(hass);
-    } else if (this._inner) {
-      this._inner.hass = hass;
+      return;
     }
+    const inner = this._inner;
+    if (!inner) return;
+    inner.overlay.hass = hass;
+    inner.controls.hass = hass;
+    if (inner.chart) {
+      const span = graphSpanMinutes(hass, this._elapsed);
+      if (span !== this._chartSpan) {
+        this._chartSpan = span;
+        inner.chart.setConfig({ ...this._chartCfg, graph_span_minutes: span });
+      }
+      inner.chart.hass = hass;
+    }
+    this._applyGlow(hass);
+  }
+
+  _applyGlow(hass) {
+    if (!this._glowHost || !this._climate) return;
+    const st = hass.states[this._climate];
+    this._glowHost.classList.toggle("heating", !!(st && st.state === "heat"));
+  }
+
+  _msgCard(text) {
+    const card = document.createElement("ha-card");
+    const div = document.createElement("div");
+    div.style.padding = "16px";
+    div.textContent = text;
+    card.appendChild(div);
+    return card;
   }
 
   async _render(hass) {
-    const helpers = await window.loadCardHelpers();
-    const view = await buildView(hass, this._config);
-    // buildView returns a panel wrapper; mount its single inner card.
-    const inner = view.cards && view.cards.length ? view.cards[0] : view;
-    const el = helpers.createCardElement(inner);
-    el.hass = hass;
-    this._inner = el;
-    this.replaceChildren(el);
+    try {
+      const helpers = await window.loadCardHelpers();
+      const device = findDevice(hass, this._config && this._config.serial);
+      if (!device) {
+        this.replaceChildren(
+          this._msgCard(
+            "No Green Mountain Grills device found. Add the GMG integration, or set serial: in the card config."
+          )
+        );
+        return;
+      }
+      const e = mapEntities(deviceEntities(hass, device.id));
+      this._climate = e.climate;
+      this._elapsed = e.elapsed;
+      const image = await resolveImage(device);
+
+      const overlay = helpers.createCardElement(buildOverlay(image, e));
+      overlay.hass = hass;
+      const controls = helpers.createCardElement(buildControls(e));
+      controls.hass = hass;
+
+      const col = document.createElement("div");
+      col.className = "gmg-col";
+
+      const glowHost = document.createElement("div");
+      glowHost.className = "gmg-glow";
+      glowHost.appendChild(overlay);
+      this._glowHost = glowHost;
+      col.appendChild(glowHost);
+      col.appendChild(controls);
+
+      let chart = null;
+      if (!(this._config && this._config.show_graph === false)) {
+        this._chartCfg = buildGraph(e, hass);
+        if (this._chartCfg) {
+          this._chartSpan = this._chartCfg.graph_span_minutes;
+          chart = helpers.createCardElement(this._chartCfg);
+          chart.hass = hass;
+          col.appendChild(chart);
+        }
+      }
+
+      const style = document.createElement("style");
+      style.textContent = GMG_CARD_CSS;
+      this.replaceChildren(style, col);
+      this._inner = { overlay, controls, chart };
+      this._applyGlow(hass);
+    } catch (err) {
+      this.replaceChildren(this._msgCard("GMG card error: " + (err && err.message ? err.message : err)));
+    }
   }
 
   getCardSize() {
@@ -457,6 +716,7 @@ class GmgSmokerCard extends HTMLElement {
   }
 }
 
+customElements.define("gmg-cook-chart", GmgCookChart);
 customElements.define("gmg-smoker-card", GmgSmokerCard);
 
 // Lovelace strategies (alternative: generate a whole view / dashboard).
@@ -468,7 +728,7 @@ window.customCards.push({
   type: "gmg-smoker-card",
   name: "GMG Smoker",
   description:
-    "Auto-built smoker overlay, controls and progress graph for your Green Mountain Grill.",
+    "Self-contained smoker overlay, controls and native cook chart for your Green Mountain Grill — no extra cards required.",
   preview: false,
 });
-console.info("%c GMG-SMOKER %c card + strategy loaded ", "background:#ff6d00;color:#fff", "");
+console.info("%c GMG-SMOKER %c card + native chart loaded ", "background:#ff6d00;color:#fff", "");
