@@ -610,8 +610,7 @@ const GMG_CARD_CSS = `
   .gmg-glow.heating { box-shadow: 0 0 22px 6px rgba(255, 109, 0, 0.55); }
   .gmg-temp { position: absolute; transform: translate(-50%, -50%); z-index: 1;
               display: flex; flex-direction: column; align-items: center; line-height: 1.04;
-              font-weight: bold; text-align: center; pointer-events: none;
-              text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75); }
+              font-weight: bold; text-align: center; pointer-events: none; }
   .gmg-temp .v { font-size: 16px; }
   .gmg-temp .l { font-size: 10px; font-weight: 600; letter-spacing: 0.5px; opacity: 0.92; }
   .gmg-temp-grill { top: 64%; left: 38%; color: #ff6d00; }
