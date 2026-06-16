@@ -71,14 +71,10 @@ This fork adds the cooking layer on top:
 ## Gallery
 
 <p align="center">
-  <img src="docs/preview-overlay.png" alt="GMG auto-cook overlay preview" width="82%" />
-</p>
-
-<p align="center"><em>The bundled smoker overlay shows phase, live pit/probe temperatures, warning badges, and a heating glow.</em></p>
-
-<p align="center">
   <img src="docs/assets/readme/dashboard-card.svg" alt="GMG smoker card mockup" width="96%" />
 </p>
+
+<p align="center"><em>The bundled smoker card shows phase, live pit/probe temperatures, Auto-Cook controls, and cook progress without hand-wiring entity IDs.</em></p>
 
 ---
 
