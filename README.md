@@ -1,265 +1,361 @@
-# Green Mountain Grills for Home Assistant — Auto Cook Fork
+<p align="center">
+  <img src="docs/assets/readme/hero.svg" alt="Green Mountain Grills for Home Assistant" width="100%" />
+</p>
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![HA min version](https://img.shields.io/badge/Home%20Assistant-2026.1%2B-41BDF5.svg)](https://www.home-assistant.io/)
+<p align="center">
+  <a href="https://hacs.xyz"><img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white"></a>
+  <img alt="Home Assistant" src="https://img.shields.io/badge/Home_Assistant-2026.1%2B-18bcf2?style=for-the-badge&logo=homeassistant&logoColor=white">
+  <img alt="Local polling" src="https://img.shields.io/badge/IoT-local_polling-22c55e?style=for-the-badge">
+  <img alt="Protocol" src="https://img.shields.io/badge/protocol-UDP_8080-f97316?style=for-the-badge">
+  <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge"></a>
+</p>
 
-> ## ⚠️ WARNING — HIGHLY EXPERIMENTAL
->
-> **This fork is experimental and under active development.** The Auto Cook feature automatically controls your pellet grill's temperature based on sensor readings. While safety guardrails are in place (maximum pit temperature clamp, rate-limited adjustments), this software can make real-world changes to a device involving live fire and high heat.
->
-> **Use at your own risk.** Always monitor your grill during use. Do not leave your home while an automated cook is running until you have thoroughly tested and verified the system in your environment. The authors accept no liability for property damage, injury, or food loss resulting from the use of this integration.
+# Green Mountain Grills for Home Assistant — Auto-Cook Fork
 
-> ## Fork Notice — Auto Cook Feature
->
-> This is a **feature fork** of [hallyaus/Green-Mountain-Grills](https://github.com/hallyaus/Green-Mountain-Grills), the original upstream integration. All core grill control, monitoring, and protocol logic is credited to and maintained by **[hallyaus](https://github.com/hallyaus)**.
->
-> This fork adds an **Auto Cook** subsystem — automated cook orchestration using physics-based heat diffusion modeling, probe feedback control, and SQLite session management. The feature is designed as a self-contained extension that does not modify the upstream core integration.
->
-> ### What Auto Cook Does
->
-> - **Three modes**: Set &amp; Forget (monitor + notify), Autonomous (active pit temp adjustment with rate limiting), Coach (human-in-the-loop guidance at phase boundaries)
-> - **Physics-based scheduling**: Calculates optimal smoker temperature from meat type, weight, and desired finish time using transient heat conduction — no hardcoded per-pound estimates. Works backward from your dinner time to tell you exactly when to start.
-> - **Probe feedback control**: Compares actual probe temperature against a projected trajectory curve in real time. Makes small, rate-limited pit setpoint adjustments (max ±2% of target, cooldown 60–180s) to keep the cook on schedule. Never powers off the grill.
-> - **Cook start detection**: Detects when meat hits the grill by monitoring for a rapid probe temperature drop during preheat — no manual "start" button needed after initial setup.
-> - **Stall awareness**: Recognizes the evaporative cooling plateau (158–170°F) and switches to appropriate tolerance bands automatically.
-> - **Safety guardrails**: Hard pit temp clamp at 375°F, asymmetric adjustment bias (raise when behind, don't aggressively reduce when ahead), pre-flight warnings for out-of-range cook times with per-meat-type maximums.
-> - **Development mode logging**: Optional SQLite logging of every poll cycle during active cooks for post-cook analysis and model calibration.
->
-> ### Quick Start
->
-> 1. Install this fork via HACS (or manual install from `custom_components/gmg/`)
-> 2. Set up your grill as normal through the integration config flow
-> 3. Enable Auto Cook in the integration options (disabled by default)
-> 4. Use the Auto Cook entities (meat type selector, weight input, finish time picker) and press **Start Cook**
-> 5. The system handles preheat, cook start detection, phase monitoring, and pull notifications automatically
->
-> See [CONTEXT.md](CONTEXT.md) for full domain terminology, guardrails, state machine, and resolved design decisions.
->
-> ---
+Control and monitor Green Mountain Grills WiFi-enabled pellet smokers directly from Home Assistant — **locally, over your own LAN, with no cloud dependency**.
 
-Control and monitor Green Mountain Grills WiFi-enabled pellet smokers
-directly from Home Assistant - locally, over your own LAN, with no cloud
-dependency.
+This fork keeps the original local GMG integration and adds an experimental **Auto-Cook** subsystem: physics-based cook planning, probe-feedback pacing, a bundled smoker dashboard card, configurable safety ceilings, unit preferences, and local SQLite cook-session tracking.
 
-**Fork maintained by [giBiLatoR](https://github.com/giBiLatoR). Original integration by [hallyaus](https://github.com/hallyaus).**
+> [!WARNING]
+> **Highly experimental live-fire software.** Auto-Cook can automatically adjust a pellet grill's pit setpoint. It includes guardrails, but it still controls a device involving fire, heat, food, and property risk. Always supervise your grill. Do not leave home while an automated cook is running. Use at your own risk.
 
-![GMG auto-cook overlay](docs/preview-overlay.png)
+> [!NOTE]
+> This is a feature fork of [`hallyaus/Green-Mountain-Grills`](https://github.com/hallyaus/Green-Mountain-Grills). Core LAN protocol/control work is credited to **[hallyaus](https://github.com/hallyaus)**. This fork is maintained by **[giBiLatoR](https://github.com/giBiLatoR)** and focuses on Auto-Cook, dashboard UX, and cook orchestration.
 
-*The auto-cook overlay: phase, live grill/probe temperatures, and a heating glow.
-A neutral silhouette ships by default — your model's artwork loads automatically.*
+---
 
-## What this fork adds — the interface
+## Contents
 
-The upstream integration by **[hallyaus](https://github.com/hallyaus)** gives you
-rock-solid **local control**: a climate entity, temperature / probe / fault
-sensors, power and cold-smoke buttons, LAN + DHCP discovery, and diagnostics —
-all over your own network, no cloud. This fork keeps every bit of that and adds
-a **cooking interface** on top:
+- [Why this fork exists](#why-this-fork-exists)
+- [Gallery](#gallery)
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [Auto-Cook modes](#auto-cook-modes)
+- [Safety guardrails](#safety-guardrails)
+- [Bundled smoker dashboard](#bundled-smoker-dashboard)
+- [Configuration options](#configuration-options)
+- [Entities](#entities)
+- [Services](#services)
+- [Supported models](#supported-models)
+- [Automation examples](#automation-examples)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Documentation map](#documentation-map)
 
-- **Auto-Cook controller** — tell it the meat, the weight, and when you want to
-  eat; a heat-diffusion model picks the pit temperature and keeps the cook on
-  schedule with small, rate-limited nudges. It never powers the grill off by
-  itself.
-- **One-line dashboard** — a bundled Lovelace strategy (`custom:gmg-smoker`)
-  auto-builds the smoker view from your device: the picture overlay above,
-  context-aware controls, **Pace** (ahead/behind), an **ETA clock**, and a
-  *Cook Progress vs Plan* graph. No entity IDs to wire.
-- **Per-model artwork** — the overlay shows your grill's silhouette, auto-picked
-  by model.
-- **Safety & polish** — a configurable **maximum grill temperature** and
-  natural-language meat names ("Pork Butt — Pulled Pork", not `pork_butt_pulled`).
+---
 
-## Setup
+## Why this fork exists
 
-1. **Install the integration.**
-   - *HACS:* HACS → ⋮ → *Custom repositories* → add
-     `https://github.com/giBiLatoR/Green-Mountain-Grills` (category
-     *Integration*) → install **Green Mountain Grills** → **restart Home
-     Assistant**.
-   - *Manual:* copy `custom_components/gmg/` into your HA `config/custom_components/`
-     folder and **restart Home Assistant**.
-2. **Add your grill.** Settings → Devices & Services → **Add Integration** →
-   *Green Mountain Grills*. It scans the LAN (UDP `8080`) and lists any grills
-   found; or enter the IP manually. The grill must be on local WiFi, **not
-   Server Mode** (toggle that in the GMG app).
-3. **Set a temperature ceiling** *(optional, recommended).* On the integration
-   tile → **Configure** → **Maximum grill temperature**. Caps the manual setpoint
-   *and* Auto-Cook so the grill is never told to run hotter than your unit can.
-4. **Enable Auto-Cook** *(optional).* Same **Configure** dialog → tick **Enable
-   Auto Cook**. (Off by default; the cook phase stays *idle* until it's on.)
-5. **Add the dashboard.** Make a new view in YAML mode and paste:
-   ```yaml
-   strategy:
-     type: custom:gmg-smoker
-     # serial: GMG12137138   # only if you have more than one grill
-     # show_graph: false     # set if you don't run apexcharts-card
+The upstream integration already gives Home Assistant proper local control of GMG smokers:
+
+- climate entity for the grill
+- temperature/probe/fault sensors
+- power and Cold Smoke buttons
+- services for setpoints and probe targets
+- config flow, DHCP discovery, reconfigure flow and diagnostics
+- no vendor cloud requirement once **Server Mode** is disabled
+
+This fork adds the cooking layer on top:
+
+| Addition | What it gives you |
+|---|---|
+| **Auto-Cook controller** | Tell it the meat, weight, probe and when you want to eat; it calculates a pit target and tracks the cook against a projection curve. |
+| **Three cook modes** | Full autonomous setpoint control, set-and-forget tracking, or coach-only advice. |
+| **Bundled smoker card** | A Home Assistant card/strategy that builds the whole smoker UI without hand-wiring entity IDs. |
+| **Cook-session database** | SQLite session tracking at `/config/gmg_cooks.db`, with reference meat data imported from `cook-database.json`. |
+| **Safety controls** | Configurable maximum grill temperature, small rate-limited adjustments, and a never-auto-off rule. |
+| **Unit preferences** | Follow Home Assistant units or force °C/°F and kg/lb for the GMG integration. |
+
+---
+
+## Gallery
+
+<p align="center">
+  <img src="docs/preview-overlay.png" alt="GMG auto-cook overlay preview" width="82%" />
+</p>
+
+<p align="center"><em>The bundled smoker overlay shows phase, live pit/probe temperatures, warning badges, and a heating glow.</em></p>
+
+<p align="center">
+  <img src="docs/assets/readme/dashboard-card.svg" alt="GMG smoker card mockup" width="96%" />
+</p>
+
+---
+
+## Quick start
+
+### 1. Prepare the grill
+
+The integration only works when the controller is in **local LAN mode**.
+
+1. Open the GMG mobile app.
+2. Connect to the grill.
+3. Open WiFi settings.
+4. Turn **Server Mode** off.
+5. Keep Home Assistant and the grill on the same LAN/VLAN/SSID, or make sure UDP broadcasts can cross between them.
+
+### 2. Install through HACS
+
+1. Home Assistant → **HACS** → **Integrations**.
+2. Open the three-dot menu → **Custom repositories**.
+3. Add:
+
+   ```text
+   https://github.com/giBiLatoR/Green-Mountain-Grills
    ```
-   For the heating glow and the progress graph, install the HACS cards
-   [`card-mod`](https://github.com/thomasloven/lovelace-card-mod) and
-   [`apexcharts-card`](https://github.com/RomRider/apexcharts-card).
-6. **Add your model's photo** *(optional).* Drop a transparent PNG named
-   `<model_id>.png` into `custom_components/gmg/static/models/` — picked up
-   automatically (see [the model table](#prebuilt-dashboard-auto-strategy)).
-7. **Restart once** after first install so the dashboard assets register.
 
-A full walkthrough of an actual cook is in
-[Using Auto Cook, start to finish](#using-auto-cook-start-to-finish).
+4. Category: **Integration**.
+5. Install **Green Mountain Grills**.
+6. Restart Home Assistant.
 
-## How it works (the simple version)
+Manual install is also supported: copy `custom_components/gmg/` into `config/custom_components/gmg/`, then restart Home Assistant.
 
-Think of your pellet grill as an oven that burns little wood pellets to make heat and smoke. This add-on talks to the grill over your home WiFi (no internet or cloud needed) and does two jobs:
+### 3. Add the integration
 
-1. **Watch.** Every few seconds it asks the grill how things are going: how hot the fire box is, how hot the meat is (that's the *probe* — a thermometer you stick in the food), how many pellets are left, and whether anything is wrong. Those readings become the tiles and the glowing smoker picture you see on your dashboard.
+1. Home Assistant → **Settings** → **Devices & Services**.
+2. **Add Integration** → search **Green Mountain Grills**.
+3. Choose:
+   - **Auto-discover** for same-LAN UDP discovery, or
+   - **Manual** if you know the grill IP address.
+4. The integration probes serial, firmware and model, then creates the device and entities.
 
-2. **Drive — "Auto Cook" (a.k.a. Cruise Control).** You tell it three things: *what* meat, *how heavy*, and *what time you want to eat*. A physics model — the same kind of maths that describes how heat slowly soaks into food — figures out how hot to run the grill and when dinner will actually be ready. While it cooks, it keeps checking the meat's real temperature against where it *should* be by now, and nudges the grill a little hotter or cooler to stay on schedule. It does this gently, and it will **never shut the fire off by itself**.
+### 4. Enable Auto-Cook when ready
 
-### Cook modes (what they're *meant* to do)
+Integration tile → **Configure**:
 
-| Mode | Idea |
-|------|------|
-| **Set & Forget** | Just watch and tell you what's happening — send notifications at each stage, but let *you* turn the dials. |
-| **Autonomous** | Drive the grill itself — make small, rate-limited setpoint nudges to keep the food on its schedule. |
-| **Coach** | Meet in the middle — pause at the big moments (preheat done, stall, almost-there) and suggest what to do, you decide. |
+- set a **Maximum grill temperature** ceiling
+- choose **Temperature unit** / **Weight unit** if desired
+- enable **Auto Cook**
+- optionally enable push notifications and development logging
 
-> **Heads-up (current code):** the mode you pick is saved with the cook, but the
-> control loop doesn't branch on it yet — right now every mode runs the same
-> active-adjustment + notify logic. Wiring the three behaviours apart is a
-> planned change; until then, treat the selector as a label.
+---
 
-### Reading the cook on your dashboard
+## How it works
 
-- **Auto Start Temp** — the grill temperature the physics model chose for this
-  cook (`cook_pit_target`). This is the "estimated start temperature."
-- **Pace** — are we ahead or behind? It compares the food's real temperature to
-  where the projection says it *should* be: 🟢 on track, 🔵 ahead, 🔴 behind,
-  with the gap in °F.
-- **Cook Progress vs Plan** — an [apexcharts](https://github.com/RomRider/apexcharts-card)
-  graph of **Food Actual vs Food Expected** (plus grill and pit setpoint), so
-  you can see the real curve tracking the planned curve in real time.
+<p align="center">
+  <img src="docs/assets/readme/architecture.svg" alt="GMG architecture diagram" width="96%" />
+</p>
 
-The cook moves through stages, like steps in a recipe:
+The integration has three layers:
 
-**Preheat** (get hot) → **Waiting for meat** (it notices the temperature dip when you put cold food on) → **Cooking** → **Approaching** (almost done) → **Pull!** (it tells you to take the meat off).
+1. **Home Assistant layer** — config flow, options flow, entities, services, diagnostics and the bundled dashboard card.
+2. **Integration layer** — `GMGCoordinator`, `GMGClient`, protocol parsing, command encoding, Auto-Cook controller and local SQLite cook sessions.
+3. **Grill controller layer** — GMG WiFi controller speaking raw local UDP on port `8080`.
 
-The stage it's on right now is the **"phase"** shown on your dashboard. If the phase says *idle*, no auto-cook is running yet — you start one with the **Start Auto-Cook** button after turning Cruise Control on.
+### The simple version
 
-## Features
+Think of the pellet grill as a wood-fired oven with a WiFi controller.
 
-### Core Integration (upstream)
+- The integration **watches**: every poll asks for pit temperature, probe temperatures, setpoints, power/fire state and warnings.
+- Auto-Cook can **drive**: it calculates where the meat should be by now and, depending on mode, nudges the pit setpoint gently to stay on schedule.
+- It does **not** need the vendor cloud once Server Mode is disabled.
 
-- Full **climate** entity for the grill with setpoint, current temperature,
-  HVAC mode, preset for Cold Smoke, and on/off control.
-- **Sensor** entities for grill temperature, probe 1, probe 2, profile time
-  remaining, firmware version, signal warnings, and the last-warn code.
-- **Binary sensor** entities for flame-on, low-pellet, fan / auger / ignitor
-  faults, and Cold Smoke active.
-- **Number** entities for probe 1 and probe 2 targets, with the correct
-  150-550 degF / 32-257 degF ranges.
-- **Button** entities for Power On, Power Off, and Cold Smoke.
-- **Services** for setting setpoints, targeting probes, and starting Cold
-  Smoke, all exposed in the Developer Tools service picker.
-- Built-in **diagnostics** download for issue reporting.
-- **Repair issues** for the most common failure modes - notably the
-  Server Mode interlock - with clickable fix-flows.
-- Full **translations** scaffolding (English ships in-box; others are
-  populated as community translations land).
-- Targets the **Platinum** Home Assistant integration quality scale: strict
-  typing, async-only, full config flow, options flow, reconfigure flow,
-  DHCP discovery, and comprehensive test coverage.
+<p align="center">
+  <img src="docs/assets/readme/auto-cook-loop.svg" alt="Auto-Cook control loop" width="96%" />
+</p>
 
-### Auto Cook (this fork)
+Auto-Cook state machine:
 
-- **Select** entities for meat type (21 cuts from physics model), cook mode, and probe selection
-- **Sensor** entities for cook state machine, current phase, elapsed/remaining time, expected vs actual probe temp
-- **Binary sensor** for on-schedule tracking
-- **Button** entities for Start Cook and Abort Cook
-- **Number** entity for cook weight input (kg)
-- SQLite session management at `/config/gmg_cooks.db` with reference meat database imported from [cook-database.json](cook-database.json)
+```text
+IDLE → PLANNED → PREHEATING → WAITING_MEAT → COOKING ↔ IN_STALL → APPROACHING → PULL_REACHED → COMPLETE
+```
 
-## Supported models
+Important language:
 
-See [docs/MODELS.md](docs/MODELS.md) for the full controller matrix.
+| Term | Meaning |
+|---|---|
+| **Pit temp** | Actual smoker chamber temperature. |
+| **Pit setpoint** | Temperature the grill is commanded to hold. |
+| **Pull temp** | Internal meat temperature where the cook is considered ready to pull. |
+| **Projection curve** | Expected probe temperature over time for the chosen meat/weight/finish time. |
+| **Cook start detection** | Probe drops rapidly when it moves from hot chamber air into cold meat. |
+| **Stall** | Evaporative cooling plateau around 158–170°F. |
 
-## Installation
+---
 
-See [docs/INSTALL.md](docs/INSTALL.md) for step-by-step instructions,
-including how to disable Server Mode in the GMG mobile app.
+## Auto-Cook modes
 
-## Configuration
+| Mode | Auto power-on | Sets pit at start | Ongoing setpoint writes | Best for |
+|---|---:|---:|---:|---|
+| **Autonomous** | Yes | Yes | Yes, rate-limited | Let the integration keep the cook on schedule. |
+| **Set & Forget** | Yes | Yes | No | Let it preheat and track, but avoid mid-cook writes. |
+| **Coach** | No | No | No | Human-in-the-loop guidance only. |
 
-The integration has no YAML configuration; everything is set up through the
-UI.
+All modes share the same meat database, projection curve, state machine and milestone notifications. They differ only in how much control the integration takes over the physical grill.
 
-- **Auto-discovery** broadcasts on UDP `8080` and lists every grill that
-  responds.
-- **DHCP discovery** offers a one-click setup when Home Assistant sees a
-  matching MAC prefix on the network.
-- **Manual entry** is available for routed networks where broadcast
-  discovery is not viable.
-- **Options**: scan interval slider (default `15` seconds; UI warns below `5`),
-  a **Maximum grill temperature** slider (see below), plus Auto Cook
-  enable/disable, dev mode, and push-notification toggles.
+Auto-Cook inputs:
+
+- meat type from `cook-database.json`
+- weight
+- primary probe
+- cook mode
+- finish-in-hours target
+- configured maximum pit temperature
+
+Auto-Cook outputs:
+
+- calculated starting pit target
+- cook state / phase
+- elapsed and remaining minutes
+- expected probe temperature
+- pull target
+- on-schedule binary sensor
+- notifications and/or setpoint adjustments depending on mode
+
+---
+
+## Safety guardrails
+
+<p align="center">
+  <img src="docs/assets/readme/safety.svg" alt="Auto-Cook safety guardrails" width="88%" />
+</p>
+
+| Guardrail | Current behaviour |
+|---|---|
+| **Default max pit ceiling** | `375°F`, configurable in integration options and bounded by GMG's supported range. |
+| **Minimum pit setpoint** | `150°F`. |
+| **Maximum adjustment delta** | Small proportional setpoint changes, capped around 2% of target. |
+| **Cooldown between adjustments** | Larger changes wait longer before another write. |
+| **Never auto-power-off** | Pull reached triggers notification; the integration does not shut down live fire. |
+| **Pit failure signal** | Very low pit after being hot can trigger a critical warning. |
+| **Dev logging opt-in** | Optional SQLite poll-cycle logging for analysis/calibration only. |
+
+> [!IMPORTANT]
+> Guardrails reduce risk; they do not remove it. Pellet grills can flare, run out of pellets, lose WiFi, misread probes, or behave differently across firmware generations.
+
+---
+
+## Bundled smoker dashboard
+
+The integration ships a self-contained Lovelace card and view strategy served from `custom_components/gmg/static/gmg-smoker-strategy.js`.
+
+### Add a single card
+
+Dashboard → **Edit** → **Add Card** → search **GMG Smoker**.
+
+YAML equivalent:
+
+```yaml
+type: custom:gmg-smoker-card
+# serial: GMG12137138   # optional, only needed with multiple grills
+# show_graph: false     # optional
+```
+
+### Generate a whole view
+
+```yaml
+strategy:
+  type: custom:gmg-smoker
+  # serial: GMG12137138
+  # show_graph: true
+```
+
+The card resolves entities by registry translation key, not fragile entity IDs, so it should survive renames.
+
+Dashboard features:
+
+- model-aware smoker image with generic fallback
+- phase/status overlay
+- live grill and probe temperatures
+- warning and low-pellet indicators
+- manual controls when Auto-Cook is off
+- setup controls when Auto-Cook is idle
+- live cook readout and abort/meat-on controls while cooking
+- native inline-SVG cook progress chart — no ApexCharts dependency
+
+Model artwork convention:
+
+```text
+custom_components/gmg/static/models/<model_id>.png
+```
+
+If a matching transparent PNG exists, the card uses it. Otherwise it falls back to `smoker-generic.svg`.
+
+---
+
+## Configuration options
+
+The integration uses UI setup only — no YAML required.
+
+| Option | Default | Purpose |
+|---|---:|---|
+| **Scan interval** | `15s` | Coordinator polling cadence. UI warns below `5s`. |
+| **Maximum grill temperature** | `375°F` | Ceiling for manual setpoint and Auto-Cook writes. |
+| **Temperature unit** | Auto | Follow Home Assistant or force °C/°F for GMG temperature entities and notifications. |
+| **Weight unit** | Auto | Follow Home Assistant or force kg/lb for the cook-weight input and notifications. |
+| **Enable Auto Cook** | Off | Auto-Cook entities and control loop are opt-in. |
+| **Development mode** | Off | Extra SQLite poll logging during active cooks. |
+| **Push notifications** | Off | Enables Auto-Cook milestone notifications where supported. |
+
+The grill protocol is natively Fahrenheit. Unit preferences affect Home Assistant display/registry overrides and notification formatting; calculations remain canonical internally.
+
+---
 
 ## Entities
 
-### Core Integration
+### Core grill entities
 
-| Platform        | Entity                                | Notes                                                   |
-|-----------------|---------------------------------------|---------------------------------------------------------|
-| `climate`       | Grill                                 | Setpoint 150-550 degF, Cold Smoke preset.               |
-| `sensor`        | Grill temperature                     | degF / degC (HA unit system).                           |
-| `sensor`        | Probe 1 / Probe 2                     | `None` when unplugged (89 degF sentinel).               |
-| `sensor`        | Probe 1 target / Probe 2 target       | Echoes setpoint.                                        |
-| `sensor`        | Profile time remaining                | Seconds.                                                |
-| `sensor`        | Hopper percent (diagnostic)           | Only reported by some firmwares.                        |
-| `sensor`        | Firmware version (diagnostic)         |                                                         |
-| `sensor`        | Last warn code (diagnostic)           |                                                         |
-| `binary_sensor` | Flame on                              |                                                         |
-| `binary_sensor` | Low pellets                           |                                                         |
-| `binary_sensor` | Fan / auger / ignitor fault           | One per fault class.                                    |
-| `binary_sensor` | Cold Smoke active                     |                                                         |
-| `number`        | Probe 1 target / Probe 2 target       | 32-257 degF.                                            |
-| `number`        | Grill setpoint                        | 150-550 degF.                                           |
-| `button`        | Power On                              |                                                         |
-| `button`        | Power Off                             |                                                         |
-| `button`        | Cold Smoke                            |                                                         |
+| Platform | Entity | Notes |
+|---|---|---|
+| `climate` | Grill | Current/target temp, heat/off/fan-only, Cold Smoke preset. |
+| `sensor` | Grill temperature | Pit temperature. |
+| `sensor` | Probe 1 / Probe 2 temperature | `None` when unplugged (`89°F` sentinel). |
+| `sensor` | Probe targets | Echoes controller targets. |
+| `sensor` | Power state / fire state / warning | Controller state and diagnostics. |
+| `sensor` | Hopper percent | Diagnostic; firmware support varies. |
+| `binary_sensor` | Flame on / cooking / low pellets | Runtime and problem indicators. |
+| `binary_sensor` | Fan / auger / ignitor faults | Problem diagnostics. |
+| `number` | Grill setpoint | Manual pit setpoint, capped by configured maximum. |
+| `number` | Probe target numbers | Probe target temperatures. |
+| `button` | Power On / Power Off / Cold Smoke | Direct controller actions. |
 
-### Auto Cook (this fork)
+### Auto-Cook entities
 
-| Platform        | Entity                                | Notes                                                   |
-|-----------------|---------------------------------------|---------------------------------------------------------|
-| `select`        | Cook meat type                        | 21 cuts from physics model.                             |
-| `select`        | Cook mode                             | Set &amp; Forget / Autonomous / Coach.                  |
-| `select`        | Cook probe                            | Probe 1 (default) or Probe 2.                           |
-| `number`        | Cook weight                           | Weight in kg.                                           |
-| `sensor`        | Cook state                            | State machine value (PLANNED, PREHEATING, COOKING...).  |
-| `sensor`        | Cook phase                            | pre_stall / stall / post_stall / single_phase.          |
-| `sensor`        | Cook elapsed time                     | Duration since cook start detection.                    |
-| `sensor`        | Cook remaining time                   | Estimated minutes to pull temp.                         |
-| `sensor`        | Cook expected probe temp              | From physics projection curve at current elapsed time.  |
-| `binary_sensor` | Cook on schedule                      | Within phase tolerance band or not.                     |
-| `button`        | Start cook                            | Runs pre-flight checks, creates session.                |
-| `button`        | Abort cook                            | Cancels active cook session.                            |
+| Platform | Entity | Notes |
+|---|---|---|
+| `select` | Cook meat type | 21 cuts from the reference database. |
+| `select` | Cook mode | Set & Forget / Autonomous / Coach. |
+| `select` | Cook probe | Probe 1 or Probe 2. |
+| `number` | Cook weight | kg/lb depending on unit preference. |
+| `number` | Cook finish in | Desired ready-to-serve horizon in hours. |
+| `sensor` | Cook state / phase | State machine and thermal phase. |
+| `sensor` | Cook meat | Human-friendly current meat. |
+| `sensor` | Cook elapsed / remaining minutes | Live timing. |
+| `sensor` | Cook pit target | Calculated pit setpoint. |
+| `sensor` | Cook expected probe temp | Projection curve at current elapsed time. |
+| `sensor` | Cook pull temp | Internal meat target. |
+| `binary_sensor` | Cook on schedule | Actual probe vs projected probe tolerance. |
+| `button` | Start cook / Abort cook | Session lifecycle. |
+| `button` | Meat is on | Manual override for cook-start detection. |
+
+---
 
 ## Services
 
-### Core Integration
+| Service | Fields | Purpose |
+|---|---|---|
+| `gmg.set_probe_target` | `config_entry_id`, `probe`, `temperature` | Set probe 1/2 target from Developer Tools or automation. |
+| `gmg.refresh` | `config_entry_id` | Force an immediate poll. |
+| `gmg.start_cook` | `config_entry_id`, `meat_key`, `weight_kg`, `probe`, `mode`, `finish_in_hours` | Start Auto-Cook from service data. |
+| `gmg.abort_cook` | `config_entry_id` | Cancel the active cook session. |
 
-| Service                  | Fields                                | Notes                                  |
-|--------------------------|---------------------------------------|----------------------------------------|
-| `gmg.set_grill_temp`     | `entity_id`, `temperature`            | 150-550 degF.                          |
-| `gmg.set_probe_target`   | `entity_id`, `probe` (1 or 2), `temperature` | 32-257 degF.                    |
-| `gmg.power_on`           | `entity_id`                           |                                        |
-| `gmg.power_off`          | `entity_id`                           |                                        |
-| `gmg.cold_smoke`         | `entity_id`                           | Equivalent to power-on with profile.   |
+Most users should use the dashboard card/buttons. Services are useful for automations, scripts and advanced dashboards.
 
-### Auto Cook (this fork)
+---
 
-| Service                  | Fields                                | Notes                                  |
-|--------------------------|---------------------------------------|----------------------------------------|
-| `gmg.start_cook`         | Reads from cook helper entities       | Runs pre-flight, creates session.      |
-| `gmg.abort_cook`         | `entity_id`                           | Cancels active cook.                   |
+## Supported models
+
+See [`docs/MODELS.md`](docs/MODELS.md) for the full controller matrix. In short, the integration targets WiFi-capable GMG controllers that speak the local UDP protocol:
+
+| Model family | WiFi LAN | Probes | Notes |
+|---|---:|---:|---|
+| Trek / Davy Crockett | Yes | 1–2 | Legacy and Prime generations vary by controller. |
+| Ledge / Daniel Boone | Yes | 2 | Prime, Prime+ and Prime 2.0 variants. |
+| Peak / Jim Bowie | Yes | 2 | Prime, Prime+ and Prime 2.0 variants. |
+
+Not exposed by the local protocol: grill light switch, reliable hopper percentage on all firmwares, Smart Smoke setting, and multi-stage profile upload.
+
+---
 
 ## Automation examples
 
@@ -279,7 +375,7 @@ automation:
     actions:
       - action: notify.mobile_app
         data:
-          message: "Grill is up to temp - load the meat."
+          message: "Grill is up to temp — load the meat."
 ```
 
 ### Alert on low pellets
@@ -295,32 +391,14 @@ automation:
     actions:
       - action: notify.mobile_app
         data:
-          message: "GMG hopper is low - top it up before the next session."
+          message: "GMG hopper is low — top it up before the next session."
 ```
 
-### Auto-off when meat probe hits its target
+### Preheat on a schedule
 
 ```yaml
 automation:
-  - alias: "GMG auto-off on probe done"
-    triggers:
-      - trigger: numeric_state
-        entity_id: sensor.gmg_probe_1
-        above: 164
-    actions:
-      - action: button.press
-        target:
-          entity_id: button.gmg_power_off
-      - action: notify.mobile_app
-        data:
-          message: "Probe 1 hit target. Grill is shutting down."
-```
-
-### Pre-heat on a schedule
-
-```yaml
-automation:
-  - alias: "GMG pre-heat at 17:00"
+  - alias: "GMG preheat at 17:00"
     triggers:
       - trigger: time
         at: "17:00:00"
@@ -336,173 +414,50 @@ automation:
           temperature: 225
 ```
 
-## Prebuilt smoker card
-
-The integration ships a **custom card** that builds the whole smoker UI for you
-— a picture-overlay of the grill, the auto-cook controls, and a progress graph —
-with **no entity IDs to wire up**. It finds your GMG device automatically and
-resolves every entity by its registry key, so it keeps working even if you
-rename things, and it shows temperatures in *your* unit system (°C or °F)
-without any conversion hacks.
-
-**Add it like any card.** Open a dashboard → **Edit** → **+ Add Card** →
-search **“GMG Smoker”**. That's it. (YAML equivalent:)
+### Start an Auto-Cook session from a script
 
 ```yaml
-type: custom:gmg-smoker-card
-# serial: GMG12137138   # optional — only needed if you have >1 grill
-# show_graph: false     # optional — set false if you don't run apexcharts-card
+script:
+  start_brisket_auto_cook:
+    sequence:
+      - action: gmg.start_cook
+        data:
+          config_entry_id: YOUR_CONFIG_ENTRY_ID
+          meat_key: beef_brisket_packer
+          weight_kg: 5.0
+          probe: 1
+          mode: autonomous
+          finish_in_hours: 10
 ```
 
-**Prefer a whole dedicated view?** There's also a Lovelace *strategy* that
-generates an entire view/dashboard from the same logic — add a view in YAML
-mode with:
-
-```yaml
-strategy:
-  type: custom:gmg-smoker
-```
-
-**How it loads.** The integration serves its assets at `/gmg_static/` and
-registers the card + strategy automatically on startup — no manual “Resources”
-entry. A one-time **restart** is needed after first install so the frontend
-asset is registered.
-
-**Optional HACS cards** for the full look (the view still renders without them):
-- [`card-mod`](https://github.com/thomasloven/lovelace-card-mod) — the heating glow
-- [`apexcharts-card`](https://github.com/RomRider/apexcharts-card) — the
-  *Cook Progress vs Plan* graph (omit it with `show_graph: false`)
-
-**Overlay images.** A neutral smoker silhouette ships as the default. To use a
-real picture of your model, drop a **transparent PNG named `<model_id>.png`**
-into `custom_components/gmg/static/models/` — it is then picked up
-**automatically**, no code edit needed. The `model_id` values:
-
-| id | model | id | model | id | model |
-|----|-------|----|-------|----|-------|
-| 0 | Davy Crockett | 6 | Ledge Prime+ | 12 | Jim Bowie Prime+ |
-| 1 | Trek | 7 | Peak Prime+ | 13 | Daniel Boone Prime 2.0 |
-| 2 | Daniel Boone | 8 | Trek Prime 2.0 | 14 | Jim Bowie Prime 2.0 |
-| 3 | Jim Bowie | 9 | Ledge Prime 2.0 | 15 | Trek Prime+ |
-| 4 | Ledge | 10 | Peak Prime 2.0 | | |
-| 5 | Peak | 11 | Daniel Boone Prime+ | | |
-
-So a Jim Bowie owner saves their cut-out PNG as `static/models/3.png`. These
-are the WiFi-capable models the local protocol supports. (The integration does
-not ship product photos — they're copyright GMG; supply your own transparent
-PNGs.)
-
-> This strategy is **experimental**. It does not depend on any personal helper
-> entities — contrast with the hand-built popup below, which uses extra HACS
-> cards and a couple of custom `input_boolean` / template-sensor helpers.
-
-## Dashboard & phone popup
-
-The companion dashboards drive everything from a single **`#smoker` popup**
-(a [bubble-card](https://github.com/Clooos/Bubble-Card) pop-up) that appears on
-both the **PHONES** and **Primary** dashboards. Inside the popup:
-
-- **Smoker picture** — a `picture-elements` card overlaid on a photo of the
-  grill. It shows the **phase**, live **grill** and **probe** temperatures (in
-  °F), a power button, a spinning fan when it's running, and warning/low-pellet
-  badges. The whole card glows red while heating.
-- **Smoker Controls** — one `entities` card that changes with context:
-  - **Cruise Control off** → manual targets (grill setpoint, probe targets).
-  - **Cruise Control on + idle** → the Auto Cook setup (meat, mode, primary
-    probe, weight, finish-in-hours) and a **▶ Start Auto-Cook** button.
-  - **Cruise Control on + cooking** → a live read-out (phase, meat, on-schedule,
-    elapsed, time remaining, estimated ready-at clock, pit target, probe
-    now/expected, pull target) and a **■ Abort Cook** button.
-
-Temperatures from the integration are reported in your Home Assistant unit
-system (°C here in metric land), so the dashboards convert to °F with
-`× 1.8 + 32`. Two template helpers, `sensor.gmg_grill_temp_f` and
-`sensor.gmg_probe_1_temp_f`, do this for the picture overlay.
-
-> **Tip — "Est. Ready At" should be a clock, not a countdown that creeps.**
-> Build it from the integration's `cook_remaining_minutes` sensor
-> (`now() + remaining`), **not** from the finish-in-hours *input*. The input is
-> a fixed number, so `now() + finish_in_hours` slides forward by a minute every
-> minute. Using the remaining-minutes sensor keeps the clock steady.
-
-### Using Auto Cook, start to finish
-
-A full cook, step by step:
-
-1. **Turn Auto Cook on once.** Settings → Devices & Services → Green Mountain
-   Grills → **Configure** → tick **Enable Auto Cook**, then Submit. (The
-   per-poll control loop does nothing while this is off, so the cook phase never
-   leaves *idle*. You only need to do this once.)
-2. **Set your inputs.** On the dashboard turn **Cruise Control** on, then pick:
-   - **Meat type** (21 cuts), **Cook mode**, **Primary probe** (1 or 2)
-   - **Meat weight** (kg) and **Finish in** (hours from now you want to eat)
-3. **Press ▶ Start Auto-Cook.** The integration runs a pre-flight check, picks
-   the **start temperature** (shown as *Auto Start Temp*), powers the grill on,
-   and begins **preheating**.
-4. **Load the meat once the grill is hot.** When you push the cold probe into
-   the meat, its reading craters — that ~30°F-in-a-minute **drop** is how the
-   system knows the cook has started. (If the probe is already buried in the
-   meat and only rising, it can't see a drop and will sit in *waiting for meat*.
-   Briefly lift the probe into the open grill, then re-seat it in the meat to
-   create the drop.)
-5. **Watch it track.** The dashboard now shows **Pace** (🟢/🔵/🔴 ahead or
-   behind), **Time Remaining**, **Est. Ready At**, and the **Cook Progress vs
-   Plan** graph (food actual vs. the projected curve). The controller makes
-   small, rate-limited grill nudges to stay on schedule — it never powers the
-   grill off on its own.
-6. **Pull when it says so.** At the target temperature you get a notification to
-   take the meat off. Done.
-
-### Setting a maximum grill temperature
-
-Different grills top out at different temperatures, and you may simply not want
-yours run hot. The **Maximum grill temperature** option (Configure → slider, in
-°F) is a single ceiling that applies everywhere:
-
-- the **manual** temperature control (climate card + grill-setpoint number) won't
-  let you set higher than it, and
-- the **Auto Cook** controller is clamped to it too (bounded by a hard 375°F
-  safety cap), so the physics model can never ask for more than your grill can
-  give.
-
-Example: if your grill realistically maxes out around 300°F, set the slider to
-**300**. Nothing — manual or automatic — will command it past that. The default
-is 375°F.
-
-> **Heads-up:** changing options **reloads the integration**, which clears any
-> in-progress Auto Cook session (the session lives in memory only). Set your
-> ceiling **between cooks**, not in the middle of one.
-
-### Recent fixes (2026-06)
-
-- Synced `translations/en.json` with `strings.json`. The stale copy left the
-  Auto Cook entities unnamed, so Home Assistant fell back to collision IDs like
-  `select.gmg_gmg12137138_2`. Entities now get their proper IDs
-  (`select.gmg_gmg12137138_cook_meat_type`, `button.gmg_gmg12137138_start_cook`,
-  `sensor.gmg_gmg12137138_cook_state`, …).
-- Hardened `async_start_cook_from_helpers` to resolve helper entities by
-  registry **unique_id** instead of hard-coded entity IDs, so a future rename
-  can't break the Start Cook button.
-- Fixed the dashboard "Est. Finish Time" so it no longer creeps forward (now
-  uses `cook_remaining_minutes`).
-- Added a **Maximum grill temperature** option that caps both the manual
-  setpoint and the Auto Cook controller (see above).
+---
 
 ## Troubleshooting
 
-See the troubleshooting tree in [docs/INSTALL.md](docs/INSTALL.md). The
-single most common cause of "no devices found" is the grill being in Server
-Mode; the second is a VLAN that does not forward UDP broadcasts.
+| Symptom | Check first |
+|---|---|
+| No devices found | Server Mode must be off; grill and HA must share a broadcast domain. |
+| Manual IP works but discovery fails | VLAN/firewall/broadcast forwarding issue, not the integration. |
+| Grill unavailable | Power-cycle controller; confirm UDP `8080` both directions. |
+| Probe reads `None` | GMG uses `89°F` as unplugged sentinel; check probe seating. |
+| Auto-Cook phase stays idle | Auto-Cook is disabled or no session has been started. |
+| Waiting for meat never transitions | Press **Meat is on** if the probe was already in cold meat and no temperature drop happened. |
+| Unit display looks wrong | Check Temperature unit / Weight unit options and HA global unit system. |
 
-To collect a debug bundle:
+Debug logging:
 
-1. Enable debug logging for the integration (`logger:` block in
-   `configuration.yaml`).
-2. Reproduce the issue.
-3. Download diagnostics from the integration's device page.
-4. Open an issue with both.
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.gmg: debug
+```
 
-## Development / contributing
+Then reproduce the issue and download diagnostics from the integration's device page.
+
+---
+
+## Development
 
 ```bash
 python3 -m venv .venv
@@ -514,9 +469,23 @@ mypy custom_components/gmg
 pytest
 ```
 
-CI runs the same commands on every push and pull request. Pull requests
-should add or update tests for any behavioural change.
+CI runs lint, typing and tests on push/PR. Behavioural changes should include or update tests.
+
+---
+
+## Documentation map
+
+| File | Purpose |
+|---|---|
+| [`docs/INSTALL.md`](docs/INSTALL.md) | Full install and troubleshooting guide. |
+| [`docs/MODELS.md`](docs/MODELS.md) | Supported controller/model matrix. |
+| [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | Local UDP command/status-frame reference. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Detailed integration architecture. |
+| [`CONTEXT.md`](CONTEXT.md) | Auto-Cook domain terminology, guardrails and state machine. |
+| [`cook-database.json`](cook-database.json) | Meat reference database used by the cook model. |
+
+---
 
 ## License
 
-[MIT](LICENSE). Core integration copyright 2026 hallyaus. Auto Cook extension copyright 2026 giBiLatoR.
+[MIT](LICENSE). Core integration copyright 2026 hallyaus. Auto-Cook extension copyright 2026 giBiLatoR.
